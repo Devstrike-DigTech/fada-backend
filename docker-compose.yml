@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: fada_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fada_db
+      POSTGRES_USER: fada_user
+      POSTGRES_PASSWORD: fada_pass
+    ports:
+      - '5433:5432'
+    volumes:
+      - fada_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fada_user -d fada_db']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: fada_redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - fada_redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  fada_postgres_data:
+  fada_redis_data:
