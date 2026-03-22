@@ -43,6 +43,7 @@ import { HealthModule } from './health/health.module';
 import { AuthModule } from '@modules/auth/auth.module';
 import { UserModule } from '@modules/user/user.module';
 import { PharmacyModule } from '@modules/pharmacy/pharmacy.module';
+import { SearchModule } from '@modules/search/search.module';
 
 @Module({
   imports: [
@@ -118,7 +119,7 @@ import { PharmacyModule } from '@modules/pharmacy/pharmacy.module';
     AdminModule,              // Phase 2 ✅ (admin overrides)
     PharmacyModule,           // Phase 3 ✅
     InventoryModule,          // Phase 4 ✅
-    // SearchModule,         <- Phase 5
+    SearchModule,             // Phase 5 ✅
     // ReservationModule,    <- Phase 6
     // SubscriptionModule,   <- Phase 7
     // AdsModule,            <- Phase 8
