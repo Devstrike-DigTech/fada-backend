@@ -157,6 +157,17 @@ enum SearchType {
   pharmacy
 }
 
+enum CategoryType {
+  primary
+  secondary
+}
+
+enum PrescriptionType {
+  otc
+  prescription_only
+  controlled
+}
+
 // ─────────────────────────────────────────────
 // USER & AUTH
 // ─────────────────────────────────────────────
@@ -398,12 +409,14 @@ model PharmacyImage {
 // ─────────────────────────────────────────────
 
 model DrugCategory {
-  id          String  @id @default(uuid())
-  name        String  @unique
-  slug        String  @unique
-  iconUrl     String? @map("icon_url")
-  description String? @db.Text
-  sortOrder   Int     @default(0) @map("sort_order")
+  id          String       @id @default(uuid())
+  type        CategoryType
+  name        String       @unique
+  slug        String       @unique
+  iconUrl     String?      @map("icon_url")
+  description String?      @db.Text
+  sortOrder   Int          @default(0) @map("sort_order")
+  isActive    Boolean      @default(true) @map("is_active")
 
   drugs DrugCategoryMap[]
 
@@ -429,7 +442,7 @@ model Drug {
   stockAmount        Int         @default(0) @map("stock_amount")
   stockStatus        StockStatus @default(in_stock) @map("stock_status")
   lowStockThreshold  Int         @default(5) @map("low_stock_threshold")
-  isPrescription     Boolean     @default(false) @map("is_prescription")
+  prescriptionType   PrescriptionType? @map("prescription_type")
   expiryDate         DateTime?   @map("expiry_date") @db.Date
   createdAt          DateTime    @default(now()) @map("created_at")
   updatedAt          DateTime    @updatedAt @map("updated_at")

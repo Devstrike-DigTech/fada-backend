@@ -10,6 +10,7 @@ import { PrismaService } from '@infra/database/prisma.service';
 import { EventBusService } from '@infra/events/event-bus.service';
 import { PcnRegistryService } from '@infra/registries/pcn-registry.service';
 import { EVENTS } from '@common/types/events.types';
+import { CreateCategoryDto, UpdateCategoryDto } from './dto/manage-category.dto';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -215,5 +216,57 @@ export class AdminService {
       })),
       meta: { total, page, limit, pages: Math.ceil(total / limit) },
     };
+  }
+
+  // ─── Drug Categories ─────────────────────────────────────────────────────────
+
+  async listCategories(type?: 'primary' | 'secondary') {
+    const categories = await this.prisma.drugCategory.findMany({
+      where: type ? { type } : undefined,
+      orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+    });
+    return categories;
+  }
+
+  async createCategory(dto: CreateCategoryDto) {
+    const existing = await this.prisma.drugCategory.findUnique({
+      where: { slug: dto.slug },
+    });
+    if (existing) {
+      throw new ConflictException(`A category with slug "${dto.slug}" already exists`);
+    }
+
+    return this.prisma.drugCategory.create({
+      data: {
+        type: dto.type,
+        name: dto.name,
+        slug: dto.slug,
+        description: dto.description,
+        sortOrder: dto.sortOrder ?? 0,
+      },
+    });
+  }
+
+  async updateCategory(id: string, dto: UpdateCategoryDto) {
+    const category = await this.prisma.drugCategory.findUnique({ where: { id } });
+    if (!category) throw new NotFoundException('Category not found');
+
+    return this.prisma.drugCategory.update({
+      where: { id },
+      data: {
+        ...(dto.name && { name: dto.name }),
+        ...(dto.description !== undefined && { description: dto.description }),
+        ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
+        ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+      },
+    });
+  }
+
+  async deleteCategory(id: string) {
+    const category = await this.prisma.drugCategory.findUnique({ where: { id } });
+    if (!category) throw new NotFoundException('Category not found');
+
+    await this.prisma.drugCategory.delete({ where: { id } });
+    return { message: `Category "${category.name}" deleted` };
   }
 }

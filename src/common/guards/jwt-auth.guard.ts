@@ -33,7 +33,6 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     );
 
     if (allowGuest) {
-      // Try to authenticate but don't block if no token present
       const request = context.switchToHttp().getRequest<{
         headers: { authorization?: string; 'x-guest-token'?: string };
         guestToken?: string;
@@ -41,9 +40,9 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       const authHeader = request.headers.authorization;
       const guestToken = request.headers['x-guest-token'];
 
-      if (!authHeader && guestToken) {
-        // Attach guest token to request and allow through
-        request.guestToken = guestToken;
+      if (!authHeader) {
+        // No JWT — attach guest token if present, then allow through
+        if (guestToken) request.guestToken = guestToken;
         return true;
       }
     }

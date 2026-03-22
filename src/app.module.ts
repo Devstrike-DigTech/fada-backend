@@ -25,7 +25,9 @@ import { PaymentsModule } from '@infra/payments/payments.module';
 import { SocketModule } from '@infra/sockets/socket.module';
 import { NotificationsModule } from '@infra/notifications/notifications.module';
 import { RegistriesModule } from '@infra/registries/registries.module';
+import { NafdacModule } from '@infra/nafdac/nafdac.module';
 import { VerificationModule } from '@modules/verification/verification.module';
+import { InventoryModule } from '@modules/inventory/inventory.module';
 import { AdminModule } from '@modules/admin/admin.module';
 
 // Common
@@ -104,6 +106,7 @@ import { PharmacyModule } from '@modules/pharmacy/pharmacy.module';
     SocketModule,
     NotificationsModule,
     RegistriesModule,
+    NafdacModule,             // EMDEX / NAFDAC drug registry (global, switchable)
 
     // ── Health ───────────────────────────────────────────────────────────────
     HealthModule,
@@ -114,7 +117,7 @@ import { PharmacyModule } from '@modules/pharmacy/pharmacy.module';
     VerificationModule,       // Phase 2 ✅ (PCN + CAC verification)
     AdminModule,              // Phase 2 ✅ (admin overrides)
     PharmacyModule,           // Phase 3 ✅
-    // InventoryModule,      <- Phase 4
+    InventoryModule,          // Phase 4 ✅
     // SearchModule,         <- Phase 5
     // ReservationModule,    <- Phase 6
     // SubscriptionModule,   <- Phase 7

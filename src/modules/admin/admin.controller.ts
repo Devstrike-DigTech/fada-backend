@@ -1,11 +1,13 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
   DefaultValuePipe,
@@ -23,6 +25,7 @@ import { CurrentUser, CurrentUserData } from '@common/decorators/current-user.de
 import { AdminService } from './admin.service';
 import { OverridePcnVerificationDto } from './dto/override-pcn-verification.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
+import { CreateCategoryDto, UpdateCategoryDto, CategoryTypeDto } from './dto/manage-category.dto';
 
 @ApiTags('Admin')
 @ApiBearerAuth('access-token')
@@ -83,5 +86,35 @@ export class AdminController {
   @ApiResponse({ status: 404, description: 'Pharmacist not found' })
   retryPcnVerification(@Param('userId') userId: string) {
     return this.adminService.retryPcnVerification(userId);
+  }
+
+  // ─── Drug Categories ──────────────────────────────────────────────────────
+
+  @Get('categories')
+  @ApiOperation({ summary: 'List all drug categories, optionally filtered by type' })
+  @ApiQuery({ name: 'type', required: false, enum: CategoryTypeDto })
+  listCategories(@Query('type') type?: CategoryTypeDto) {
+    return this.adminService.listCategories(type);
+  }
+
+  @Post('categories')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a new drug category' })
+  createCategory(@Body() dto: CreateCategoryDto) {
+    return this.adminService.createCategory(dto);
+  }
+
+  @Patch('categories/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update a drug category' })
+  updateCategory(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
+    return this.adminService.updateCategory(id, dto);
+  }
+
+  @Delete('categories/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete a drug category' })
+  deleteCategory(@Param('id') id: string) {
+    return this.adminService.deleteCategory(id);
   }
 }
