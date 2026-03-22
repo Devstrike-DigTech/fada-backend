@@ -61,6 +61,15 @@ export class EmailService {
           subtext: 'Use the code below to reset your FADA password. If you did not request this, you can ignore this email.',
         });
 
+      case 'staff-invite':
+        return this.staffInviteTemplate({
+          pharmacyName: String(data['pharmacyName'] ?? 'a pharmacy'),
+          role: String(data['role'] ?? 'staff'),
+          message: data['message'] ? String(data['message']) : null,
+          token: String(data['token'] ?? ''),
+          expiresInHours: Number(data['expiresInHours'] ?? 48),
+        });
+
       case 'pcn-verified':
         return this.pcnResultTemplate({
           firstName: String(data['firstName'] ?? 'there'),
@@ -90,6 +99,72 @@ export class EmailService {
           heading: 'Your verification code',
         });
     }
+  }
+
+  private staffInviteTemplate(opts: {
+    pharmacyName: string;
+    role: string;
+    message: string | null;
+    token: string;
+    expiresInHours: number;
+  }): string {
+    const appUrl = process.env.APP_URL ?? 'http://localhost:3000';
+    const acceptUrl = `${appUrl}/staff/accept-invite/${opts.token}`;
+    const roleLabel = opts.role === 'operator' ? 'Operator' : 'Staff Member';
+
+    return /* html */ `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>You've been invited to join ${opts.pharmacyName}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Inter,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);">
+          <tr>
+            <td style="background:#0f766e;padding:32px 40px;">
+              <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">FADA</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px;">
+              <p style="margin:0 0 8px;font-size:20px;font-weight:600;color:#111827;">You've been invited!</p>
+              <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">
+                You've been invited to join <strong>${opts.pharmacyName}</strong> on FADA as a <strong>${roleLabel}</strong>.
+              </p>
+              ${opts.message ? `<div style="background:#f9fafb;border-left:3px solid #0f766e;padding:12px 16px;border-radius:4px;margin:0 0 24px;"><p style="margin:0;font-size:14px;color:#374151;font-style:italic;">"${opts.message}"</p></div>` : ''}
+              <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+                <tr>
+                  <td style="background:#0f766e;border-radius:8px;padding:14px 32px;text-align:center;">
+                    <a href="${acceptUrl}" style="color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;">Accept Invitation</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 8px;font-size:13px;color:#9ca3af;">
+                Or copy this link into your browser:
+              </p>
+              <p style="margin:0 0 24px;font-size:12px;color:#6b7280;word-break:break-all;">${acceptUrl}</p>
+              <p style="margin:0;font-size:13px;color:#9ca3af;">
+                This invitation expires in <strong>${opts.expiresInHours} hours</strong>. You must be logged in to FADA to accept it.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#f9fafb;padding:20px 40px;border-top:1px solid #e5e7eb;">
+              <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">
+                &copy; ${new Date().getFullYear()} FADA. If you weren't expecting this, you can safely ignore it.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
   }
 
   private pcnResultTemplate(opts: {

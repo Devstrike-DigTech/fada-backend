@@ -39,6 +39,8 @@ import { HealthModule } from './health/health.module';
 
 // Feature Modules
 import { AuthModule } from '@modules/auth/auth.module';
+import { UserModule } from '@modules/user/user.module';
+import { PharmacyModule } from '@modules/pharmacy/pharmacy.module';
 
 @Module({
   imports: [
@@ -108,10 +110,10 @@ import { AuthModule } from '@modules/auth/auth.module';
 
     // ── Feature Modules ──────────────────────────────────────────────────────
     AuthModule,               // Phase 2 ✅
-    VerificationModule,       // Phase 2 ✅ (PCN auto + manual)
+    UserModule,               // Phase 2 ✅ (profile management)
+    VerificationModule,       // Phase 2 ✅ (PCN + CAC verification)
     AdminModule,              // Phase 2 ✅ (admin overrides)
-    // PharmacyModule,       <- Phase 3
-    // PharmacyModule,       <- Phase 3
+    PharmacyModule,           // Phase 3 ✅
     // InventoryModule,      <- Phase 4
     // SearchModule,         <- Phase 5
     // ReservationModule,    <- Phase 6

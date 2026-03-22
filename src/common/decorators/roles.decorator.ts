@@ -4,6 +4,7 @@ export enum UserRole {
   CUSTOMER = 'customer',
   PHARMACIST = 'pharmacist',
   ADMIN = 'admin',
+  STAFF = 'staff',
 }
 
 export const ROLES_KEY = 'roles';

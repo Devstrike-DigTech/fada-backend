@@ -18,6 +18,12 @@ enum UserRole {
   customer
   pharmacist
   admin
+  staff
+}
+
+enum StaffRole {
+  operator
+  staff
 }
 
 enum OAuthProvider {
@@ -159,6 +165,9 @@ model User {
   id               String         @id @default(uuid())
   fadaId           String         @unique @map("fada_id")
   email            String         @unique
+  firstName        String?        @map("first_name")
+  lastName         String?        @map("last_name")
+  avatarUrl        String?        @map("avatar_url")
   passwordHash     String?        @map("password_hash")
   phone            String?        @unique
   phoneVerified    Boolean        @default(false) @map("phone_verified")
@@ -173,6 +182,9 @@ model User {
   customerProfile      CustomerProfile?
   pharmacistProfile    PharmacistProfile?
   pcnVerifications     PharmacistProfile[] @relation("PcnVerifiedBy")
+  staffMemberships     PharmacyStaff[]     @relation("StaffMember")
+  staffInvited         PharmacyStaff[]     @relation("StaffInvitedBy")
+  sentStaffInvites     PharmacyStaffInvite[] @relation("InviteSentBy")
   addresses          CustomerAddress[]
   pointsLedger       PointsLedger?
   notifications      NotificationRecord[]
@@ -278,6 +290,8 @@ model Pharmacy {
   branches           Branch[]
   images             PharmacyImage[]
   pharmacistProfiles PharmacistProfile[]
+  staff              PharmacyStaff[]
+  staffInvites       PharmacyStaffInvite[]
   subscription       PharmacySubscription?
   adCampaigns        AdCampaign[]
   savedByCustomers   CustomerSavedPharmacy[]
@@ -302,8 +316,54 @@ model Branch {
   workingHours PharmacyWorkingHours[]
   drugs        Drug[]
   reservations Reservation[]
+  staff        PharmacyStaff[]
+  staffInvites PharmacyStaffInvite[]
 
   @@map("branches")
+}
+
+model PharmacyStaff {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  pharmacyId  String    @map("pharmacy_id")
+  branchId    String?   @map("branch_id")
+  role        StaffRole
+  invitedById String    @map("invited_by_id")
+  isActive    Boolean   @default(true) @map("is_active")
+  joinedAt    DateTime  @default(now()) @map("joined_at")
+
+  user      User     @relation("StaffMember", fields: [userId], references: [id], onDelete: Cascade)
+  pharmacy  Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  branch    Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  invitedBy User     @relation("StaffInvitedBy", fields: [invitedById], references: [id])
+
+  @@unique([userId, pharmacyId])
+  @@index([pharmacyId])
+  @@index([branchId])
+  @@map("pharmacy_staff")
+}
+
+model PharmacyStaffInvite {
+  id          String    @id @default(uuid())
+  pharmacyId  String    @map("pharmacy_id")
+  branchId    String?   @map("branch_id")
+  email       String
+  firstName   String    @map("first_name")
+  lastName    String    @map("last_name")
+  role        StaffRole
+  token       String    @unique
+  invitedById String    @map("invited_by_id")
+  expiresAt   DateTime  @map("expires_at")
+  acceptedAt  DateTime? @map("accepted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  pharmacy  Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  branch    Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  invitedBy User     @relation("InviteSentBy", fields: [invitedById], references: [id])
+
+  @@index([token])
+  @@index([pharmacyId, email])
+  @@map("pharmacy_staff_invites")
 }
 
 model PharmacyWorkingHours {

@@ -54,6 +54,7 @@ export interface AuthResponse {
     role: string;
     isEmailVerified: boolean;
     fadaId: string;
+    avatarUrl: string | null;
   };
   tokens: AuthTokens;
 }
@@ -274,6 +275,7 @@ export class AuthService {
         role: user.role,
         isEmailVerified: user.isEmailVerified,
         fadaId: user.fadaId,
+        avatarUrl: user.avatarUrl ?? user.customerProfile?.avatarUrl ?? null,
       },
       tokens,
     };
@@ -365,6 +367,7 @@ export class AuthService {
         role: user.role,
         isEmailVerified: user.isEmailVerified,
         fadaId: user.fadaId,
+        avatarUrl: user.avatarUrl ?? user.customerProfile?.avatarUrl ?? null,
       },
       tokens,
     };
@@ -618,6 +621,7 @@ export class AuthService {
         role: user.role,
         isEmailVerified: user.isEmailVerified,
         fadaId: user.fadaId,
+        avatarUrl: user.avatarUrl ?? user.customerProfile?.avatarUrl ?? null,
       },
       tokens,
     };
@@ -702,6 +706,7 @@ export class AuthService {
         role: user.role,
         isEmailVerified: user.isEmailVerified,
         fadaId: user.fadaId,
+        avatarUrl: user.avatarUrl ?? user.customerProfile?.avatarUrl ?? null,
       },
       tokens,
     };
@@ -874,6 +879,7 @@ export class AuthService {
         role: user.role,
         isEmailVerified: true,
         fadaId: user.fadaId,
+        avatarUrl: user.avatarUrl ?? null,
       },
       tokens,
     };
@@ -904,6 +910,7 @@ export class AuthService {
       role: user.role,
       isEmailVerified: user.isEmailVerified,
       fadaId: user.fadaId,
+      avatarUrl: user.avatarUrl ?? user.customerProfile?.avatarUrl ?? null,
     };
   }
 
