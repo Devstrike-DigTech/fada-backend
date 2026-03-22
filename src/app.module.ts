@@ -12,6 +12,7 @@ import jwtConfig from '@config/jwt.config';
 import storageConfig from '@config/storage.config';
 import paymentsConfig from '@config/payments.config';
 import notificationsConfig from '@config/notifications.config';
+import authConfig from '@config/auth.config';
 import { envValidationSchema } from '@config/env.validation';
 
 // Infrastructure Modules
@@ -22,6 +23,10 @@ import { QueueModule } from '@infra/queue/queue.module';
 import { StorageModule } from '@infra/storage/storage.module';
 import { PaymentsModule } from '@infra/payments/payments.module';
 import { SocketModule } from '@infra/sockets/socket.module';
+import { NotificationsModule } from '@infra/notifications/notifications.module';
+import { RegistriesModule } from '@infra/registries/registries.module';
+import { VerificationModule } from '@modules/verification/verification.module';
+import { AdminModule } from '@modules/admin/admin.module';
 
 // Common
 import { HttpExceptionFilter } from '@common/filters/http-exception.filter';
@@ -31,6 +36,9 @@ import { RolesGuard } from '@common/guards/roles.guard';
 
 // Health
 import { HealthModule } from './health/health.module';
+
+// Feature Modules
+import { AuthModule } from '@modules/auth/auth.module';
 
 @Module({
   imports: [
@@ -45,6 +53,7 @@ import { HealthModule } from './health/health.module';
         storageConfig,
         paymentsConfig,
         notificationsConfig,
+        authConfig,
       ],
       validationSchema: envValidationSchema,
       validationOptions: {
@@ -91,12 +100,17 @@ import { HealthModule } from './health/health.module';
     StorageModule,
     PaymentsModule,
     SocketModule,
+    NotificationsModule,
+    RegistriesModule,
 
     // ── Health ───────────────────────────────────────────────────────────────
     HealthModule,
 
-    // ── Feature Modules (added phase by phase) ───────────────────────────────
-    // AuthModule,           <- Phase 2
+    // ── Feature Modules ──────────────────────────────────────────────────────
+    AuthModule,               // Phase 2 ✅
+    VerificationModule,       // Phase 2 ✅ (PCN auto + manual)
+    AdminModule,              // Phase 2 ✅ (admin overrides)
+    // PharmacyModule,       <- Phase 3
     // PharmacyModule,       <- Phase 3
     // InventoryModule,      <- Phase 4
     // SearchModule,         <- Phase 5

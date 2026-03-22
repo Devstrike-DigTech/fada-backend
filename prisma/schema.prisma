@@ -156,21 +156,23 @@ enum SearchType {
 // ─────────────────────────────────────────────
 
 model User {
-  id            String         @id @default(uuid())
-  fadaId        String         @unique @map("fada_id")
-  email         String         @unique
-  passwordHash  String?        @map("password_hash")
-  phone         String?
-  phoneVerified Boolean        @default(false) @map("phone_verified")
-  role          UserRole
-  oauthProvider OAuthProvider? @map("oauth_provider")
-  oauthId       String?        @map("oauth_id")
-  isActive      Boolean        @default(true) @map("is_active")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
+  id               String         @id @default(uuid())
+  fadaId           String         @unique @map("fada_id")
+  email            String         @unique
+  passwordHash     String?        @map("password_hash")
+  phone            String?        @unique
+  phoneVerified    Boolean        @default(false) @map("phone_verified")
+  role             UserRole
+  googleId         String?        @unique @map("google_id")
+  appleId          String?        @unique @map("apple_id")
+  isEmailVerified  Boolean        @default(false) @map("is_email_verified")
+  isActive         Boolean        @default(false) @map("is_active")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
 
-  customerProfile    CustomerProfile?
-  pharmacistProfile  PharmacistProfile?
+  customerProfile      CustomerProfile?
+  pharmacistProfile    PharmacistProfile?
+  pcnVerifications     PharmacistProfile[] @relation("PcnVerifiedBy")
   addresses          CustomerAddress[]
   pointsLedger       PointsLedger?
   notifications      NotificationRecord[]
@@ -189,12 +191,14 @@ model User {
 }
 
 model CustomerProfile {
-  id          String    @id @default(uuid())
-  userId      String    @unique @map("user_id")
-  fullName    String    @map("full_name")
-  dateOfBirth DateTime? @map("date_of_birth") @db.Date
-  gender      Gender?
-  avatarUrl   String?   @map("avatar_url")
+  id           String    @id @default(uuid())
+  userId       String    @unique @map("user_id")
+  firstName    String    @map("first_name")
+  lastName     String    @map("last_name")
+  dateOfBirth  DateTime? @map("date_of_birth") @db.Date
+  gender       Gender?
+  avatarUrl    String?   @map("avatar_url")
+  referralCode String?   @unique @map("referral_code")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -208,13 +212,17 @@ model PharmacistProfile {
   lastName         String                   @map("last_name")
   licenseType      String                   @map("license_type")
   licenseNumber    String                   @map("license_number")
-  pcnVerified      Boolean                  @default(false) @map("pcn_verified")
-  pcnVerifiedAt    DateTime?                @map("pcn_verified_at")
-  pharmacyId       String?                  @map("pharmacy_id")
-  roleInPharmacy   PharmacistRoleInPharmacy @default(owner) @map("role_in_pharmacy")
+  pcnVerified              Boolean                  @default(false) @map("pcn_verified")
+  pcnVerifiedAt            DateTime?                @map("pcn_verified_at")
+  pcnVerificationSource    String?                  @map("pcn_verification_source")
+  pcnOverrideNote          String?                  @map("pcn_override_note") @db.Text
+  pcnVerifiedById          String?                  @map("pcn_verified_by_id")
+  pharmacyId               String?                  @map("pharmacy_id")
+  roleInPharmacy           PharmacistRoleInPharmacy @default(owner) @map("role_in_pharmacy")
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  pharmacy Pharmacy? @relation(fields: [pharmacyId], references: [id])
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pharmacy      Pharmacy? @relation(fields: [pharmacyId], references: [id])
+  pcnVerifiedBy User?     @relation("PcnVerifiedBy", fields: [pcnVerifiedById], references: [id])
 
   @@map("pharmacist_profiles")
 }

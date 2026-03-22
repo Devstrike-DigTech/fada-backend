@@ -5,6 +5,7 @@ export default registerAs('app', () => ({
   port: parseInt(process.env.PORT ?? '3000', 10),
   url: process.env.APP_URL ?? 'http://localhost:3000',
   apiVersion: process.env.API_VERSION ?? 'v1',
+  adminBootstrapSecret: process.env.ADMIN_BOOTSTRAP_SECRET,
   geoRadiusTiers: (process.env.GEO_RADIUS_TIERS_KM ?? '2,5,10,20,50')
     .split(',')
     .map(Number),
