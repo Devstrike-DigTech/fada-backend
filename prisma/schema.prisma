@@ -19,6 +19,7 @@ enum UserRole {
   pharmacist
   admin
   staff
+  marketer
 }
 
 enum StaffRole {
@@ -242,22 +243,24 @@ enum PrescriptionType {
 // ─────────────────────────────────────────────
 
 model User {
-  id              String   @id @default(uuid())
-  fadaId          String   @unique @map("fada_id")
-  email           String   @unique
-  firstName       String?  @map("first_name")
-  lastName        String?  @map("last_name")
-  avatarUrl       String?  @map("avatar_url")
-  passwordHash    String?  @map("password_hash")
-  phone           String?  @unique
-  phoneVerified   Boolean  @default(false) @map("phone_verified")
-  role            UserRole
-  googleId        String?  @unique @map("google_id")
-  appleId         String?  @unique @map("apple_id")
-  isEmailVerified Boolean  @default(false) @map("is_email_verified")
-  isActive        Boolean  @default(false) @map("is_active")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(uuid())
+  fadaId             String   @unique @map("fada_id")
+  email              String   @unique
+  firstName          String?  @map("first_name")
+  lastName           String?  @map("last_name")
+  avatarUrl          String?  @map("avatar_url")
+  passwordHash       String?  @map("password_hash")
+  phone              String?  @unique
+  phoneVerified      Boolean  @default(false) @map("phone_verified")
+  role               UserRole
+  googleId           String?  @unique @map("google_id")
+  appleId            String?  @unique @map("apple_id")
+  isEmailVerified    Boolean  @default(false) @map("is_email_verified")
+  isActive           Boolean  @default(false) @map("is_active")
+  /// Set on accounts created by an admin with a temporary password (marketers)
+  mustChangePassword Boolean  @default(false) @map("must_change_password")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   customerProfile        CustomerProfile?
   pharmacistProfile      PharmacistProfile?
@@ -279,6 +282,9 @@ model User {
   reservations           Reservation[]           @relation("CustomerReservations")
   servedReservations     Reservation[]           @relation("ServedReservations")
   cancelledReservations  Reservation[]           @relation("CancelledReservations")
+  prospectsAdded         PharmacyProspect[]      @relation("ProspectAddedBy")
+  prospectsDeleted       PharmacyProspect[]      @relation("ProspectDeletedBy")
+  prospectInteractions   ProspectInteraction[]
 
   @@map("users")
 }
@@ -378,6 +384,7 @@ model Pharmacy {
   savedByCustomers   CustomerSavedPharmacy[]
   pointsLedger       PointsLedger?
   dailyStats         PharmacyDailyStat[]
+  prospects          PharmacyProspect[]
 
   @@map("pharmacies")
 }
@@ -1380,4 +1387,107 @@ model PlatformDailyStat {
   updatedAt              DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("platform_daily_stats")
+}
+
+// ─── Field marketing (Fada: Marketer app) ─────────────────────────────────────
+
+enum ProspectStage {
+  to_call
+  to_visit
+  visited
+}
+
+enum ProspectStoreType {
+  small
+  medium
+  large
+  hospital
+}
+
+enum ProspectResponse {
+  positive
+  neutral
+  negative
+}
+
+enum ProspectInteractionType {
+  call
+  visit
+}
+
+/// A sales territory marketers work through (admin-managed).
+model SalesRoute {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  prospects PharmacyProspect[]
+
+  @@map("sales_routes")
+}
+
+/// A pharmacy the field team is courting, before (or until) it joins FADA.
+model PharmacyProspect {
+  id                  String             @id @default(uuid())
+  name                String
+  phone               String
+  /// Digits only, Nigerian numbers in 234… form — used to catch duplicates
+  phoneNormalized     String             @map("phone_normalized")
+  email               String?
+  address             String
+  latitude            Float?
+  longitude           Float?
+  routeId             String             @map("route_id")
+  storeType           ProspectStoreType? @map("store_type")
+  stage               ProspectStage      @default(to_call)
+  lastCallResponse    ProspectResponse?  @map("last_call_response")
+  lastCalledAt        DateTime?          @map("last_called_at")
+  lastVisitResponse   ProspectResponse?  @map("last_visit_response")
+  lastVisitedAt       DateTime?          @map("last_visited_at")
+  callCount           Int                @default(0) @map("call_count")
+  visitCount          Int                @default(0) @map("visit_count")
+  addedById           String             @map("added_by_id")
+  convertedPharmacyId String?            @map("converted_pharmacy_id")
+  convertedAt         DateTime?          @map("converted_at")
+  deletedAt           DateTime?          @map("deleted_at")
+  deletedById         String?            @map("deleted_by_id")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+
+  route             SalesRoute            @relation(fields: [routeId], references: [id])
+  addedBy           User                  @relation("ProspectAddedBy", fields: [addedById], references: [id])
+  deletedBy         User?                 @relation("ProspectDeletedBy", fields: [deletedById], references: [id])
+  convertedPharmacy Pharmacy?             @relation(fields: [convertedPharmacyId], references: [id], onDelete: SetNull)
+  interactions      ProspectInteraction[]
+
+  @@index([stage, deletedAt])
+  @@index([routeId])
+  @@index([phoneNormalized])
+  @@index([addedById])
+  @@map("pharmacy_prospects")
+}
+
+/// One call or visit, as logged by a marketer. Append-only history.
+model ProspectInteraction {
+  id         String                  @id @default(uuid())
+  prospectId String                  @map("prospect_id")
+  marketerId String                  @map("marketer_id")
+  type       ProspectInteractionType
+  response   ProspectResponse
+  comment    String
+  occurredAt DateTime                @map("occurred_at")
+  latitude   Float?
+  longitude  Float?
+  createdAt  DateTime                @default(now()) @map("created_at")
+
+  prospect PharmacyProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  marketer User             @relation(fields: [marketerId], references: [id])
+
+  @@index([prospectId, occurredAt])
+  @@index([marketerId, occurredAt])
+  @@map("prospect_interactions")
 }

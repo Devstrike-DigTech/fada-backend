@@ -16,6 +16,7 @@ interface ErrorResponse {
   message: string | string[];
   path: string;
   timestamp: string;
+  details?: Record<string, unknown>;
   requestId?: string;
 }
 
@@ -31,6 +32,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     let status: number;
     let message: string | string[];
     let error: string;
+    let details: Record<string, unknown> | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -46,9 +48,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
         const responseObj = exceptionResponse as {
           message?: string | string[];
           error?: string;
+          details?: Record<string, unknown>;
         };
         message = responseObj.message ?? exception.message;
         error = responseObj.error ?? exception.name;
+        // Structured context a client can act on (e.g. the duplicate's id)
+        if (responseObj.details && typeof responseObj.details === 'object') {
+          details = responseObj.details;
+        }
       } else {
         message = exception.message;
         error = exception.name;
@@ -95,6 +102,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message,
       path: safeUrl,
       timestamp: new Date().toISOString(),
+      ...(details && { details }),
       ...(requestId && { requestId }),
     };
 

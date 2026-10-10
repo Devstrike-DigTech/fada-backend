@@ -8,6 +8,7 @@ import { SupportModule } from '@modules/support/support.module';
 import { ContentModule } from '@modules/content/content.module';
 import { AnalyticsModule } from '@modules/analytics/analytics.module';
 import { VerificationModule } from '@modules/verification/verification.module';
+import { MarketingModule } from '@modules/marketing/marketing.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AdminAuditService } from './admin-audit.service';
@@ -21,6 +22,7 @@ import { AdminNotificationsController } from './admin-notifications.controller';
 import { AdminSupportController } from './admin-support.controller';
 import { AdminContentController } from './admin-content.controller';
 import { AdminAnalyticsController } from './admin-analytics.controller';
+import { AdminMarketingController } from './admin-marketing.controller';
 
 /**
  * Back office. Admins monitor the platform (dashboard, audit trail) and
@@ -38,6 +40,7 @@ import { AdminAnalyticsController } from './admin-analytics.controller';
     ContentModule,
     AnalyticsModule,
     VerificationModule,
+    MarketingModule,
   ],
   controllers: [
     AdminController,
@@ -50,6 +53,7 @@ import { AdminAnalyticsController } from './admin-analytics.controller';
     AdminSupportController,
     AdminContentController,
     AdminAnalyticsController,
+    AdminMarketingController,
   ],
   providers: [AdminService, AdminAuditService, AdminDashboardService],
   exports: [AdminAuditService],

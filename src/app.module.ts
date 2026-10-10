@@ -59,6 +59,7 @@ import { ContentModule } from '@modules/content/content.module';
 import { SupportModule } from '@modules/support/support.module';
 import { AnalyticsModule } from '@modules/analytics/analytics.module';
 import { RealtimeModule } from '@modules/realtime/realtime.module';
+import { MarketingModule } from '@modules/marketing/marketing.module';
 
 @Module({
   imports: [
@@ -144,6 +145,7 @@ import { RealtimeModule } from '@modules/realtime/realtime.module';
     SupportModule, // Phase 12 ✅ (tickets with threads, suggestions)
     AnalyticsModule, // Phase 13 ✅ (store dashboards, search trends, nightly snapshots)
     RealtimeModule, // Phase 14 ✅ (live reservation feeds, upload progress, billing)
+    MarketingModule, // Field marketing (Fada: Marketer app) — prospect pipeline
   ],
   providers: [
     // ── Global Exception Filter ──────────────────────────────────────────────

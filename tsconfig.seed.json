@@ -7,6 +7,10 @@
     "declaration": false,
     "incremental": false
   },
-  "include": ["prisma/seed.ts", "src/modules/content/content.defaults.ts"],
+  "include": [
+    "prisma/seed.ts",
+    "src/modules/content/content.defaults.ts",
+    "src/modules/marketing/marketing.constants.ts"
+  ],
   "exclude": ["node_modules", "dist", "test"]
 }

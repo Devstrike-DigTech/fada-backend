@@ -66,6 +66,8 @@ export interface AuthResponse {
     isEmailVerified: boolean;
     fadaId: string;
     avatarUrl: string | null;
+    /** Staff accounts issued a temporary password must change it first */
+    mustChangePassword?: boolean;
   };
   tokens: AuthTokens;
 }
@@ -394,12 +396,13 @@ export class AuthService {
       user: {
         id: user.id,
         email: user.email,
-        firstName: profile?.firstName ?? '',
-        lastName: profile?.lastName ?? '',
+        firstName: profile?.firstName ?? user.firstName ?? '',
+        lastName: profile?.lastName ?? user.lastName ?? '',
         role: user.role,
         isEmailVerified: user.isEmailVerified,
         fadaId: user.fadaId,
         avatarUrl: user.avatarUrl ?? user.customerProfile?.avatarUrl ?? null,
+        mustChangePassword: user.mustChangePassword,
       },
       tokens,
     };
@@ -582,7 +585,7 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
     await this.prisma.user.update({
       where: { id: userId },
-      data: { passwordHash: hashedPassword },
+      data: { passwordHash: hashedPassword, mustChangePassword: false },
     });
     await this.revokeAllRefreshTokens(userId);
 
@@ -958,12 +961,13 @@ export class AuthService {
     return {
       id: user.id,
       email: user.email,
-      firstName: profile?.firstName ?? '',
-      lastName: profile?.lastName ?? '',
+      firstName: profile?.firstName ?? user.firstName ?? '',
+      lastName: profile?.lastName ?? user.lastName ?? '',
       role: user.role,
       isEmailVerified: user.isEmailVerified,
       fadaId: user.fadaId,
       avatarUrl: user.avatarUrl ?? user.customerProfile?.avatarUrl ?? null,
+      mustChangePassword: user.mustChangePassword,
     };
   }
 
@@ -1008,7 +1012,8 @@ export class AuthService {
   }
 
   /** Deletes every stored refresh token for the user (all devices). */
-  private async revokeAllRefreshTokens(userId: string): Promise<void> {
+  /** Signs the user out everywhere (used by password changes and admin resets) */
+  async revokeAllRefreshTokens(userId: string): Promise<void> {
     const client = this.redis.getClient();
     let cursor = '0';
     do {

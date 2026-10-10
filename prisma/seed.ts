@@ -4,6 +4,7 @@ import {
   CONTENT_DEFAULTS,
   CONTENT_KEYS,
 } from '../src/modules/content/content.defaults';
+import { DEFAULT_SALES_ROUTES } from '../src/modules/marketing/marketing.constants';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { PrismaPg } = require('@prisma/adapter-pg') as {
   PrismaPg: new (config: { connectionString: string }) => unknown;
@@ -289,9 +290,24 @@ async function seedContentPages() {
   );
 }
 
+async function seedSalesRoutes() {
+  console.log('Seeding sales routes…');
+  let created = 0;
+  for (const [i, name] of DEFAULT_SALES_ROUTES.entries()) {
+    const exists = await prisma.salesRoute.findUnique({ where: { name } });
+    if (exists) continue;
+    await prisma.salesRoute.create({ data: { name, sortOrder: i } });
+    created++;
+  }
+  console.log(
+    `Seeded ${created} sales route(s); ${DEFAULT_SALES_ROUTES.length - created} already existed.`,
+  );
+}
+
 async function main() {
   await seedSubscriptionPlans();
   await seedContentPages();
+  await seedSalesRoutes();
 
   console.log('Seeding drug categories…');
 
