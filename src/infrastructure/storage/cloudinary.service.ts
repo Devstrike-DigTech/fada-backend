@@ -10,9 +10,13 @@ export class CloudinaryService implements OnModuleInit {
 
   onModuleInit(): void {
     cloudinary.config({
-      cloud_name: this.configService.get<string>('storage.cloudinary.cloudName'),
+      cloud_name: this.configService.get<string>(
+        'storage.cloudinary.cloudName',
+      ),
       api_key: this.configService.get<string>('storage.cloudinary.apiKey'),
-      api_secret: this.configService.get<string>('storage.cloudinary.apiSecret'),
+      api_secret: this.configService.get<string>(
+        'storage.cloudinary.apiSecret',
+      ),
     });
     this.logger.log('Cloudinary configured');
   }
@@ -33,7 +37,11 @@ export class CloudinaryService implements OnModuleInit {
           },
           (error, result: UploadApiResponse | undefined) => {
             if (error || !result) {
-              reject(error);
+              reject(
+                error instanceof Error
+                  ? error
+                  : new Error(error?.message ?? 'Cloudinary upload failed'),
+              );
               return;
             }
             resolve({ url: result.secure_url, publicId: result.public_id });

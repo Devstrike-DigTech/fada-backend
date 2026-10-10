@@ -1,9 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  DrugLookupResult,
-  IDrugInfoProvider,
-} from './drug-info.interface';
+import { DrugLookupResult, IDrugInfoProvider } from './drug-info.interface';
 
 /**
  * EMDEX Drug Info Provider

@@ -1,6 +1,11 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
+import { JwtService } from '@nestjs/jwt';
+import {
+  activeSecrets,
+  pickVerifyingSecret,
+} from '@common/security/jwt-rotation';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '@infra/database/prisma.service';
 import { CurrentUserData } from '@common/decorators/current-user.decorator';
@@ -18,11 +23,23 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    jwtService: JwtService,
   ) {
+    const secrets = activeSecrets(
+      configService.get<string>('jwt.accessSecret'),
+      configService.get<string>('jwt.accessSecretPrevious'),
+    );
+    if (secrets.length === 0)
+      throw new Error('JWT_ACCESS_SECRET is not configured');
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('jwt.accessSecret') ?? 'secret',
+      // Rotation: accept tokens signed with the current or the previous secret
+      secretOrKeyProvider: (
+        _req: unknown,
+        rawJwtToken: string,
+        done: (err: Error | null, secret?: string) => void,
+      ) => done(null, pickVerifyingSecret(jwtService, rawJwtToken, secrets)),
     });
   }
 

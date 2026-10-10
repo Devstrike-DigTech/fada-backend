@@ -9,8 +9,13 @@ import {
   DRUG_INFO_PROVIDER,
   IDrugInfoProvider,
 } from '@infra/nafdac/drug-info.interface';
-import { EVENTS, BatchUploadStartedPayload } from '@common/types/events.types';
+import {
+  EVENTS,
+  BatchUploadProgressPayload,
+  BatchUploadStartedPayload,
+} from '@common/types/events.types';
 import { QUEUE_NAMES } from '@infra/queue/queue.constants';
+import { SubscriptionEntitlementsService } from '@modules/subscription/subscription-entitlements.service';
 
 interface BatchRow {
   nafdacNumber?: string;
@@ -40,6 +45,7 @@ export class BatchUploadProcessor {
     private readonly prisma: PrismaService,
     private readonly eventBus: EventBusService,
     private readonly storage: StorageService,
+    private readonly entitlements: SubscriptionEntitlementsService,
     @Inject(DRUG_INFO_PROVIDER)
     private readonly drugInfoProvider: IDrugInfoProvider,
   ) {}
@@ -50,7 +56,9 @@ export class BatchUploadProcessor {
   ): Promise<void> {
     const { jobId, branchId, fileUrl } = job.data;
 
-    this.logger.log(`Processing batch upload job ${jobId} for branch ${branchId}`);
+    this.logger.log(
+      `Processing batch upload job ${jobId} for branch ${branchId}`,
+    );
 
     await this.prisma.batchUploadJob.update({
       where: { id: jobId },
@@ -70,41 +78,95 @@ export class BatchUploadProcessor {
       const text = await response.text();
       rows = this.parseCsv(text);
     } catch (err) {
-      this.logger.error(`Batch upload ${jobId}: file fetch/parse failed — ${String(err)}`);
+      this.logger.error(
+        `Batch upload ${jobId}: file fetch/parse failed — ${String(err)}`,
+      );
       await this.prisma.batchUploadJob.update({
         where: { id: jobId },
-        data: { status: 'failed', errorRows: [{ message: String(err) }] as unknown as Prisma.InputJsonValue },
+        data: {
+          status: 'failed',
+          errorRows: [
+            { message: String(err) },
+          ] as unknown as Prisma.InputJsonValue,
+        },
+      });
+      this.emitProgress(
+        job.data,
+        'failed',
+        0,
+        0,
+        0,
+        0,
+        'The file could not be read. Check it is a valid CSV.',
+      );
+      this.eventBus.emit(EVENTS.INVENTORY.BATCH_UPLOAD_FAILED, {
+        jobId,
+        pharmacyId: job.data.pharmacyId,
+        branchId,
+        successCount: 0,
+        failureCount: 0,
+        completedAt: new Date(),
       });
       return;
     }
+
+    await this.prisma.batchUploadJob.update({
+      where: { id: jobId },
+      data: { totalRows: rows.length },
+    });
+    this.emitProgress(job.data, 'processing', 0, rows.length, 0, 0);
+    // Stream progress about every 2 % (at least every 10 rows)
+    const progressEvery = Math.max(10, Math.ceil(rows.length / 50));
 
     // ── 2. Process rows ───────────────────────────────────────────────────────
     let addedCount = 0;
     let errorCount = 0;
     const errorRows: RowError[] = [];
 
+    // Plan limit: a bulk upload may not exceed the pharmacy's inventory slots
+    const ent = await this.entitlements.getEntitlements(job.data.pharmacyId);
+    const usage = await this.entitlements.getUsage(job.data.pharmacyId);
+    let slotsLeft = Math.max(
+      0,
+      ent.inventorySlotLimit - usage.inventorySlotsUsed,
+    );
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rowNumber = i + 2; // +2 because row 1 is the header
 
       try {
-        await this.processRow(row, branchId);
-        addedCount++;
-
-        // Update progress every 10 rows
-        if (addedCount % 10 === 0) {
-          await job.progress(Math.round((i / rows.length) * 100));
-          await this.prisma.batchUploadJob.update({
-            where: { id: jobId },
-            data: { addedCount },
-          });
+        if (slotsLeft <= 0) {
+          throw new Error(
+            `Inventory limit reached for the ${ent.planName} plan (${ent.inventorySlotLimit} drugs). Upgrade to add more.`,
+          );
         }
+        await this.processRow(row, branchId);
+        slotsLeft--;
+        addedCount++;
       } catch (err) {
         errorCount++;
         errorRows.push({
           row: rowNumber,
           message: err instanceof Error ? err.message : String(err),
         });
+      }
+
+      const processed = i + 1;
+      if (processed % progressEvery === 0 && processed < rows.length) {
+        await job.progress(Math.round((processed / rows.length) * 100));
+        await this.prisma.batchUploadJob.update({
+          where: { id: jobId },
+          data: { addedCount, errorCount },
+        });
+        this.emitProgress(
+          job.data,
+          'processing',
+          processed,
+          rows.length,
+          addedCount,
+          errorCount,
+        );
       }
     }
 
@@ -131,8 +193,17 @@ export class BatchUploadProcessor {
       `Batch upload ${jobId} done — added: ${addedCount}, errors: ${errorCount}`,
     );
 
+    this.emitProgress(
+      job.data,
+      finalStatus,
+      rows.length,
+      rows.length,
+      addedCount,
+      errorCount,
+    );
+
     // ── 4. Emit completion event ──────────────────────────────────────────────
-    await this.eventBus.emit(EVENTS.INVENTORY.BATCH_UPLOAD_COMPLETED, {
+    this.eventBus.emit(EVENTS.INVENTORY.BATCH_UPLOAD_COMPLETED, {
       jobId,
       pharmacyId: job.data.pharmacyId,
       branchId,
@@ -140,6 +211,35 @@ export class BatchUploadProcessor {
       failureCount: errorCount,
       completedAt: new Date(),
     });
+  }
+
+  private emitProgress(
+    data: { jobId: string; pharmacyId: string; branchId: string },
+    status: BatchUploadProgressPayload['status'],
+    processed: number,
+    total: number,
+    added: number,
+    errors: number,
+    message?: string,
+  ): void {
+    const payload: BatchUploadProgressPayload = {
+      jobId: data.jobId,
+      pharmacyId: data.pharmacyId,
+      branchId: data.branchId,
+      status,
+      processed,
+      total,
+      added,
+      errors,
+      percent:
+        total > 0
+          ? Math.round((processed / total) * 100)
+          : status === 'processing'
+            ? 0
+            : 100,
+      message,
+    };
+    this.eventBus.emit(EVENTS.INVENTORY.BATCH_UPLOAD_PROGRESS, payload);
   }
 
   // ─── Row processor ────────────────────────────────────────────────────────────
@@ -180,10 +280,19 @@ export class BatchUploadProcessor {
       }
     }
 
-    const validPrescriptionTypes = ['otc', 'prescription_only', 'controlled'] as const;
-    type PT = typeof validPrescriptionTypes[number];
-    const raw = row.prescriptionType?.trim().toLowerCase().replace(/[- ]/g, '_');
-    const prescriptionType: PT | null = validPrescriptionTypes.includes(raw as PT)
+    const validPrescriptionTypes = [
+      'otc',
+      'prescription_only',
+      'controlled',
+    ] as const;
+    type PT = (typeof validPrescriptionTypes)[number];
+    const raw = row.prescriptionType
+      ?.trim()
+      .toLowerCase()
+      .replace(/[- ]/g, '_');
+    const prescriptionType: PT | null = validPrescriptionTypes.includes(
+      raw as PT,
+    )
       ? (raw as PT)
       : null;
 
@@ -225,7 +334,7 @@ export class BatchUploadProcessor {
         packageType: row.packageType?.trim() || null,
         price,
         stockAmount,
-        stockStatus: stockStatus as 'in_stock' | 'low_stock' | 'out_of_stock',
+        stockStatus: stockStatus,
         lowStockThreshold,
         prescriptionType,
         expiryDate,
@@ -263,9 +372,11 @@ export class BatchUploadProcessor {
         manufacturer: obj['manufacturer'],
         drugType: obj['drug_type'] || obj['drugtype'],
         packageType: obj['package_type'] || obj['packagetype'],
-        price: obj['price'] || '0',
+        // No default: a blank price must be reported, not listed as free
+        price: obj['price'] ?? '',
         stockAmount: obj['stock_amount'] || obj['stockamount'] || '0',
-        lowStockThreshold: obj['low_stock_threshold'] || obj['lowstockthreshold'],
+        lowStockThreshold:
+          obj['low_stock_threshold'] || obj['lowstockthreshold'],
         expiryDate: obj['expiry_date'] || obj['expirydate'],
         prescriptionType: obj['prescription_type'] || obj['prescriptiontype'],
       });

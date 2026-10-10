@@ -21,18 +21,29 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Roles, UserRole } from '@common/decorators/roles.decorator';
-import { CurrentUser, CurrentUserData } from '@common/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserData,
+} from '@common/decorators/current-user.decorator';
 import { AdminService } from './admin.service';
+import { PharmacyVerificationService } from '@modules/verification/pharmacy-verification.service';
 import { OverridePcnVerificationDto } from './dto/override-pcn-verification.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
-import { CreateCategoryDto, UpdateCategoryDto, CategoryTypeDto } from './dto/manage-category.dto';
+import {
+  CreateCategoryDto,
+  UpdateCategoryDto,
+  CategoryTypeDto,
+} from './dto/manage-category.dto';
 
 @ApiTags('Admin')
 @ApiBearerAuth('access-token')
 @Roles(UserRole.ADMIN)
 @Controller({ path: 'admin', version: '1' })
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly verification: PharmacyVerificationService,
+  ) {}
 
   // ─── Create Admin ────────────────────────────────────────────────────────
 
@@ -63,7 +74,9 @@ export class AdminController {
 
   @Post('pharmacists/:userId/verify-pcn')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Manually approve PCN verification for a pharmacist' })
+  @ApiOperation({
+    summary: 'Manually approve PCN verification for a pharmacist',
+  })
   @ApiParam({ name: 'userId', description: 'The pharmacist user ID' })
   @ApiResponse({ status: 200, description: 'PCN manually verified' })
   @ApiResponse({ status: 400, description: 'Already verified' })
@@ -73,14 +86,20 @@ export class AdminController {
     @Body() dto: OverridePcnVerificationDto,
     @CurrentUser() admin: CurrentUserData,
   ) {
-    return this.adminService.overridePcnVerification(userId, admin.sub, dto.note);
+    return this.adminService.overridePcnVerification(
+      userId,
+      admin.sub,
+      dto.note,
+    );
   }
 
   // ─── Retry Auto PCN Verification ─────────────────────────────────────────
 
   @Post('pharmacists/:userId/retry-pcn')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Re-run automatic PCN lookup against the PCN registry' })
+  @ApiOperation({
+    summary: 'Re-run automatic PCN lookup against the PCN registry',
+  })
   @ApiParam({ name: 'userId', description: 'The pharmacist user ID' })
   @ApiResponse({ status: 200, description: 'Lookup result returned' })
   @ApiResponse({ status: 404, description: 'Pharmacist not found' })
@@ -88,10 +107,57 @@ export class AdminController {
     return this.adminService.retryPcnVerification(userId);
   }
 
+  // ─── Pharmacy verification ───────────────────────────────────────────────
+
+  @Post('pharmacies/:pharmacyId/verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Verify a pharmacy by hand (marks CAC registration verified, then requires the owner PCN)',
+  })
+  @ApiParam({ name: 'pharmacyId' })
+  verifyPharmacy(
+    @Param('pharmacyId') pharmacyId: string,
+    @Body() dto: OverridePcnVerificationDto,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    return this.verification.adminVerify(pharmacyId, admin.sub, dto.note);
+  }
+
+  @Post('pharmacies/:pharmacyId/unverify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Withdraw verification (hides the pharmacy from search and reservations)',
+  })
+  @ApiParam({ name: 'pharmacyId' })
+  unverifyPharmacy(
+    @Param('pharmacyId') pharmacyId: string,
+    @Body() dto: OverridePcnVerificationDto,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    return this.verification.adminUnverify(
+      pharmacyId,
+      admin.sub,
+      dto.note ?? 'No reason given',
+    );
+  }
+
+  @Get('pharmacies/:pharmacyId/verification')
+  @ApiOperation({
+    summary: 'Recompute and show what a pharmacy still needs to be verified',
+  })
+  @ApiParam({ name: 'pharmacyId' })
+  pharmacyVerification(@Param('pharmacyId') pharmacyId: string) {
+    return this.verification.recompute(pharmacyId);
+  }
+
   // ─── Drug Categories ──────────────────────────────────────────────────────
 
   @Get('categories')
-  @ApiOperation({ summary: 'List all drug categories, optionally filtered by type' })
+  @ApiOperation({
+    summary: 'List all drug categories, optionally filtered by type',
+  })
   @ApiQuery({ name: 'type', required: false, enum: CategoryTypeDto })
   listCategories(@Query('type') type?: CategoryTypeDto) {
     return this.adminService.listCategories(type);

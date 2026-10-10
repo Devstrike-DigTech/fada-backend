@@ -14,9 +14,9 @@ import { Request } from 'express';
 @Injectable()
 export class GuestGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest<
-      Request & { guestToken?: string }
-    >();
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { guestToken?: string }>();
 
     const guestToken = request.headers['x-guest-token'] as string | undefined;
     const hasUser = !!request.user;

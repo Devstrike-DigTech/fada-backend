@@ -12,7 +12,9 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '@common/dto/pagination.dto';
 
 export class DrugSearchQueryDto extends PaginationDto {
-  @ApiProperty({ description: 'Drug name, generic name, alias, or NAFDAC number' })
+  @ApiProperty({
+    description: 'Drug name, generic name, alias, or NAFDAC number',
+  })
   @IsString()
   @IsNotEmpty()
   q: string;

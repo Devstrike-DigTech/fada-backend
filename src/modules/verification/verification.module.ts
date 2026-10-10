@@ -5,6 +5,7 @@ import { PcnVerificationListener } from './pcn-verification.listener';
 import { PcnVerificationProcessor } from './pcn-verification.processor';
 import { CacVerificationListener } from './cac-verification.listener';
 import { CacVerificationProcessor } from './cac-verification.processor';
+import { PharmacyVerificationService } from './pharmacy-verification.service';
 
 @Module({
   imports: [
@@ -16,6 +17,8 @@ import { CacVerificationProcessor } from './cac-verification.processor';
     PcnVerificationProcessor,
     CacVerificationListener,
     CacVerificationProcessor,
+    PharmacyVerificationService,
   ],
+  exports: [PharmacyVerificationService],
 })
 export class VerificationModule {}

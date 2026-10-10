@@ -5,12 +5,15 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '@infra/database/prisma.service';
 import { EventBusService } from '@infra/events/event-bus.service';
 import { PcnRegistryService } from '@infra/registries/pcn-registry.service';
 import { EVENTS } from '@common/types/events.types';
-import { CreateCategoryDto, UpdateCategoryDto } from './dto/manage-category.dto';
+import {
+  CreateCategoryDto,
+  UpdateCategoryDto,
+} from './dto/manage-category.dto';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -54,7 +57,12 @@ export class AdminService {
 
     this.logger.log(`Admin created: ${user.id} by internal call`);
 
-    return { id: user.id, email: user.email, fadaId: user.fadaId, role: user.role };
+    return {
+      id: user.id,
+      email: user.email,
+      fadaId: user.fadaId,
+      role: user.role,
+    };
   }
 
   private generateAdminFadaId(): string {
@@ -81,7 +89,9 @@ export class AdminService {
     }
 
     if (profile.pcnVerified) {
-      throw new BadRequestException('PCN is already verified for this pharmacist');
+      throw new BadRequestException(
+        'PCN is already verified for this pharmacist',
+      );
     }
 
     await this.prisma.pharmacistProfile.update({
@@ -117,7 +127,9 @@ export class AdminService {
       userId: pharmacistUserId,
     });
 
-    return { message: `PCN verification manually approved for pharmacist ${pharmacistUserId}` };
+    return {
+      message: `PCN verification manually approved for pharmacist ${pharmacistUserId}`,
+    };
   }
 
   // ─── Retry Auto PCN Verification ────────────────────────────────────────────
@@ -135,13 +147,17 @@ export class AdminService {
     }
 
     if (profile.pcnVerified) {
-      throw new BadRequestException('PCN is already verified for this pharmacist');
+      throw new BadRequestException(
+        'PCN is already verified for this pharmacist',
+      );
     }
 
     let found = false;
 
     try {
-      const result = await this.pcnRegistry.lookupLicense(profile.licenseNumber);
+      const result = await this.pcnRegistry.lookupLicense(
+        profile.licenseNumber,
+      );
       found = result.found;
     } catch (err) {
       throw new BadRequestException(
@@ -194,7 +210,11 @@ export class AdminService {
     const [profiles, total] = await this.prisma.$transaction([
       this.prisma.pharmacistProfile.findMany({
         where: { pcnVerified: false },
-        include: { user: { select: { id: true, email: true, fadaId: true, createdAt: true } } },
+        include: {
+          user: {
+            select: { id: true, email: true, fadaId: true, createdAt: true },
+          },
+        },
         orderBy: { user: { createdAt: 'desc' } },
         skip,
         take: limit,
@@ -233,7 +253,9 @@ export class AdminService {
       where: { slug: dto.slug },
     });
     if (existing) {
-      throw new ConflictException(`A category with slug "${dto.slug}" already exists`);
+      throw new ConflictException(
+        `A category with slug "${dto.slug}" already exists`,
+      );
     }
 
     return this.prisma.drugCategory.create({
@@ -248,7 +270,9 @@ export class AdminService {
   }
 
   async updateCategory(id: string, dto: UpdateCategoryDto) {
-    const category = await this.prisma.drugCategory.findUnique({ where: { id } });
+    const category = await this.prisma.drugCategory.findUnique({
+      where: { id },
+    });
     if (!category) throw new NotFoundException('Category not found');
 
     return this.prisma.drugCategory.update({
@@ -263,7 +287,9 @@ export class AdminService {
   }
 
   async deleteCategory(id: string) {
-    const category = await this.prisma.drugCategory.findUnique({ where: { id } });
+    const category = await this.prisma.drugCategory.findUnique({
+      where: { id },
+    });
     if (!category) throw new NotFoundException('Category not found');
 
     await this.prisma.drugCategory.delete({ where: { id } });

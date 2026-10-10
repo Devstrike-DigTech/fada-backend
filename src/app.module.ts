@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 
 // Config
@@ -23,7 +24,7 @@ import { QueueModule } from '@infra/queue/queue.module';
 import { StorageModule } from '@infra/storage/storage.module';
 import { PaymentsModule } from '@infra/payments/payments.module';
 import { SocketModule } from '@infra/sockets/socket.module';
-import { NotificationsModule } from '@infra/notifications/notifications.module';
+import { NotificationProvidersModule } from '@infra/notifications/notifications.module';
 import { RegistriesModule } from '@infra/registries/registries.module';
 import { NafdacModule } from '@infra/nafdac/nafdac.module';
 import { VerificationModule } from '@modules/verification/verification.module';
@@ -35,6 +36,9 @@ import { HttpExceptionFilter } from '@common/filters/http-exception.filter';
 import { ResponseTransformInterceptor } from '@common/interceptors/response-transform.interceptor';
 import { JwtAuthGuard } from '@common/guards/jwt-auth.guard';
 import { RolesGuard } from '@common/guards/roles.guard';
+import { AppThrottlerGuard } from '@common/security/app-throttler.guard';
+import { RedisThrottlerStorage } from '@common/security/redis-throttler.storage';
+import { RedisService } from '@infra/redis/redis.service';
 
 // Health
 import { HealthModule } from './health/health.module';
@@ -44,6 +48,17 @@ import { AuthModule } from '@modules/auth/auth.module';
 import { UserModule } from '@modules/user/user.module';
 import { PharmacyModule } from '@modules/pharmacy/pharmacy.module';
 import { SearchModule } from '@modules/search/search.module';
+import { ReservationModule } from '@modules/reservation/reservation.module';
+import { SubscriptionModule } from '@modules/subscription/subscription.module';
+import { PromotionsModule } from '@modules/promotions/promotions.module';
+import { AdsModule } from '@modules/ads/ads.module';
+import { CustomerModule } from '@modules/customer/customer.module';
+import { PointsModule } from '@modules/points/points.module';
+import { NotificationsModule } from '@modules/notifications/notifications.module';
+import { ContentModule } from '@modules/content/content.module';
+import { SupportModule } from '@modules/support/support.module';
+import { AnalyticsModule } from '@modules/analytics/analytics.module';
+import { RealtimeModule } from '@modules/realtime/realtime.module';
 
 @Module({
   imports: [
@@ -79,23 +94,21 @@ import { SearchModule } from '@modules/search/search.module';
     }),
 
     // ── Rate Limiting ────────────────────────────────────────────────────────
-    ThrottlerModule.forRoot([
-      {
-        name: 'short',
-        ttl: 1000,
-        limit: 10,
-      },
-      {
-        name: 'medium',
-        ttl: 60_000,
-        limit: 100,
-      },
-      {
-        name: 'long',
-        ttl: 3_600_000,
-        limit: 1000,
-      },
-    ]),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService, RedisService],
+      useFactory: (config: ConfigService, redis: RedisService) => ({
+        // Defaults per user (signed in) or per IP (anonymous); auth routes are stricter
+        throttlers: [
+          { name: 'short', ttl: 1000, limit: 20 },
+          { name: 'medium', ttl: 60_000, limit: 300 },
+        ],
+        storage: new RedisThrottlerStorage(redis),
+        // Read per request so an operator can flip RATE_LIMIT_ENABLED without a redeploy of config
+        skipIf: () =>
+          (process.env.RATE_LIMIT_ENABLED ??
+            String(config.get<boolean>('app.rateLimitEnabled'))) === 'false',
+      }),
+    }),
 
     // ── Infrastructure ───────────────────────────────────────────────────────
     DatabaseModule,
@@ -105,29 +118,32 @@ import { SearchModule } from '@modules/search/search.module';
     StorageModule,
     PaymentsModule,
     SocketModule,
-    NotificationsModule,
+    NotificationProvidersModule, // Resend / FCM / Termii clients
     RegistriesModule,
-    NafdacModule,             // EMDEX / NAFDAC drug registry (global, switchable)
+    NafdacModule, // EMDEX / NAFDAC drug registry (global, switchable)
 
     // ── Health ───────────────────────────────────────────────────────────────
     HealthModule,
 
     // ── Feature Modules ──────────────────────────────────────────────────────
-    AuthModule,               // Phase 2 ✅
-    UserModule,               // Phase 2 ✅ (profile management)
-    VerificationModule,       // Phase 2 ✅ (PCN + CAC verification)
-    AdminModule,              // Phase 2 ✅ (admin overrides)
-    PharmacyModule,           // Phase 3 ✅
-    InventoryModule,          // Phase 4 ✅
-    SearchModule,             // Phase 5 ✅
-    // ReservationModule,    <- Phase 6
-    // SubscriptionModule,   <- Phase 7
-    // AdsModule,            <- Phase 8
-    // CustomerModule,       <- Phase 9
-    // PointsModule,         <- Phase 10
-    // NotificationModule,   <- Phase 11
-    // SupportModule,        <- Phase 12
-    // AnalyticsModule,      <- Phase 13
+    AuthModule, // Phase 2 ✅
+    UserModule, // Phase 2 ✅ (profile management)
+    VerificationModule, // Phase 2 ✅ (PCN + CAC verification)
+    AdminModule, // Phase 2 ✅ (admin overrides)
+    PharmacyModule, // Phase 3 ✅
+    InventoryModule, // Phase 4 ✅
+    SearchModule, // Phase 5 ✅
+    ReservationModule, // Phase 6 ✅
+    SubscriptionModule, // Phase 7 ✅ (plans, Paystack/Flutterwave, webhooks, billing sweep)
+    PromotionsModule, // Phase 8 ✅ (seasonal discounts & promo codes, back-office managed)
+    AdsModule, // Phase 8 ✅ (campaigns, geo feed, engagement, ratings, review)
+    CustomerModule, // Phase 9 ✅ (profile, addresses, saves, lists, history)
+    PointsModule, // Phase 10 ✅ (ledgers, event-driven earning, LVL reputation)
+    NotificationsModule, // Phase 11 ✅ (in-app, push, SMS, email via queue; prefs; triggers)
+    ContentModule, // Phase 12 ✅ (editable pages, Good Cause)
+    SupportModule, // Phase 12 ✅ (tickets with threads, suggestions)
+    AnalyticsModule, // Phase 13 ✅ (store dashboards, search trends, nightly snapshots)
+    RealtimeModule, // Phase 14 ✅ (live reservation feeds, upload progress, billing)
   ],
   providers: [
     // ── Global Exception Filter ──────────────────────────────────────────────
@@ -149,6 +165,12 @@ import { SearchModule } from '@modules/search/search.module';
     },
 
     // ── Global Roles Guard ───────────────────────────────────────────────────
+    // ── Global Rate Limiting (after auth so signed-in users are tracked per user) ──
+    {
+      provide: APP_GUARD,
+      useClass: AppThrottlerGuard,
+    },
+
     {
       provide: APP_GUARD,
       useClass: RolesGuard,

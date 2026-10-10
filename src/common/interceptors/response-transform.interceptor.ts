@@ -45,15 +45,18 @@ function isPaginatedResult<T>(value: unknown): value is PaginatedResult<T> {
 }
 
 @Injectable()
-export class ResponseTransformInterceptor<T>
-  implements NestInterceptor<T, ApiResponse<T>>
-{
+export class ResponseTransformInterceptor<T> implements NestInterceptor<
+  T,
+  ApiResponse<T>
+> {
   intercept(
     context: ExecutionContext,
     next: CallHandler<T>,
   ): Observable<ApiResponse<T>> {
     const request = context.switchToHttp().getRequest<Request>();
-    const response = context.switchToHttp().getResponse<{ statusCode: number }>();
+    const response = context
+      .switchToHttp()
+      .getResponse<{ statusCode: number }>();
     const requestId = request.headers['x-request-id'] as string | undefined;
 
     return next.handle().pipe(

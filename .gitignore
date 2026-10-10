@@ -3,3 +3,11 @@ node_modules/
 dist/
 *.js.map
 prisma/generated/
+
+# Build, test and OS output
+coverage/
+dist-seed/
+*.tsbuildinfo
+.DS_Store
+.env.*
+!.env.example

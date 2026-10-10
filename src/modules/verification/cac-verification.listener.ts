@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
-import { EVENTS, CacVerificationRequestedPayload } from '@common/types/events.types';
+import {
+  EVENTS,
+  CacVerificationRequestedPayload,
+} from '@common/types/events.types';
 import { QUEUE_NAMES } from '@infra/queue/queue.constants';
 
 @Injectable()

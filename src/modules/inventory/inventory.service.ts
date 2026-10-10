@@ -19,6 +19,7 @@ import {
   IDrugInfoProvider,
 } from '@infra/nafdac/drug-info.interface';
 import { QUEUE_NAMES } from '@infra/queue/queue.constants';
+import { SubscriptionEntitlementsService } from '@modules/subscription/subscription-entitlements.service';
 import { EVENTS } from '@common/types/events.types';
 import { AddDrugDto } from './dto/add-drug.dto';
 import { UpdateDrugDto } from './dto/update-drug.dto';
@@ -42,7 +43,22 @@ export class InventoryService {
     private readonly drugInfoProvider: IDrugInfoProvider,
     @InjectQueue(QUEUE_NAMES.INVENTORY_BATCH_UPLOAD)
     private readonly batchQueue: Queue,
+    private readonly entitlements: SubscriptionEntitlementsService,
   ) {}
+
+  // ─── Plan limits ────────────────────────────────────────────────────────────
+
+  private async assertInventorySlotAvailable(
+    branchId: string,
+    additional = 1,
+  ): Promise<void> {
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { pharmacyId: true },
+    });
+    if (!branch) throw new NotFoundException('Branch not found');
+    await this.entitlements.assertCanAddDrug(branch.pharmacyId, additional);
+  }
 
   // ─── NAFDAC Lookup (public endpoint, cached) ────────────────────────────────
 
@@ -66,7 +82,8 @@ export class InventoryService {
     }
 
     // 3. Hit the provider
-    const result = await this.drugInfoProvider.lookupByNafdacNumber(nafdacNumber);
+    const result =
+      await this.drugInfoProvider.lookupByNafdacNumber(nafdacNumber);
 
     if (!result.found) {
       return { source: 'provider', data: null };
@@ -104,12 +121,9 @@ export class InventoryService {
 
   // ─── Add Drug to Branch ─────────────────────────────────────────────────────
 
-  async addDrug(
-    pharmacistUserId: string,
-    branchId: string,
-    dto: AddDrugDto,
-  ) {
+  async addDrug(pharmacistUserId: string, branchId: string, dto: AddDrugDto) {
     await this.assertBranchAccess(pharmacistUserId, branchId);
+    await this.assertInventorySlotAvailable(branchId);
 
     // If a NAFDAC number is supplied, auto-enrich from provider/cache
     let enriched: Partial<AddDrugDto> = {};
@@ -143,7 +157,7 @@ export class InventoryService {
           branchId,
           nafdacNumber: merged.nafdacNumber,
           nafdacVerified: !!merged.nafdacNumber,
-          name: merged.name!,
+          name: merged.name,
           genericName: merged.genericName,
           aliasName: merged.aliasName,
           manufacturer: merged.manufacturer,
@@ -152,7 +166,7 @@ export class InventoryService {
           packageType: merged.packageType,
           adultDosage: merged.adultDosage,
           childrenDosage: merged.childrenDosage,
-          price: merged.price!,
+          price: merged.price,
           stockAmount: merged.stockAmount ?? 0,
           stockStatus: this.computeStockStatus(
             merged.stockAmount ?? 0,
@@ -209,7 +223,7 @@ export class InventoryService {
       select: { pharmacyId: true },
     });
 
-    await this.eventBus.emit(EVENTS.INVENTORY.DRUG_ADDED, {
+    this.eventBus.emit(EVENTS.INVENTORY.DRUG_ADDED, {
       drugId: drug.id,
       branchId,
       pharmacyId: branch?.pharmacyId ?? '',
@@ -234,7 +248,11 @@ export class InventoryService {
         contraindications: true,
         images: { orderBy: { sortOrder: 'asc' } },
         alternatives: {
-          include: { alternativeDrug: { select: { id: true, name: true, price: true, stockStatus: true } } },
+          include: {
+            alternativeDrug: {
+              select: { id: true, name: true, price: true, stockStatus: true },
+            },
+          },
         },
       },
     });
@@ -251,7 +269,9 @@ export class InventoryService {
     alternativeDrugId: string,
   ) {
     if (drugId === alternativeDrugId) {
-      throw new BadRequestException('A drug cannot be an alternative of itself');
+      throw new BadRequestException(
+        'A drug cannot be an alternative of itself',
+      );
     }
 
     const [drug, altDrug] = await Promise.all([
@@ -315,16 +335,30 @@ export class InventoryService {
       const updatedDrug = await tx.drug.update({
         where: { id: drugId },
         data: {
-          ...(dto.nafdacNumber !== undefined && { nafdacNumber: dto.nafdacNumber }),
+          ...(dto.nafdacNumber !== undefined && {
+            nafdacNumber: dto.nafdacNumber,
+          }),
           ...(dto.name && { name: dto.name }),
-          ...(dto.genericName !== undefined && { genericName: dto.genericName }),
+          ...(dto.genericName !== undefined && {
+            genericName: dto.genericName,
+          }),
           ...(dto.aliasName !== undefined && { aliasName: dto.aliasName }),
-          ...(dto.manufacturer !== undefined && { manufacturer: dto.manufacturer }),
-          ...(dto.composition !== undefined && { composition: dto.composition }),
+          ...(dto.manufacturer !== undefined && {
+            manufacturer: dto.manufacturer,
+          }),
+          ...(dto.composition !== undefined && {
+            composition: dto.composition,
+          }),
           ...(dto.drugType && { drugType: dto.drugType }),
-          ...(dto.packageType !== undefined && { packageType: dto.packageType }),
-          ...(dto.adultDosage !== undefined && { adultDosage: dto.adultDosage }),
-          ...(dto.childrenDosage !== undefined && { childrenDosage: dto.childrenDosage }),
+          ...(dto.packageType !== undefined && {
+            packageType: dto.packageType,
+          }),
+          ...(dto.adultDosage !== undefined && {
+            adultDosage: dto.adultDosage,
+          }),
+          ...(dto.childrenDosage !== undefined && {
+            childrenDosage: dto.childrenDosage,
+          }),
           ...(dto.price !== undefined && { price: dto.price }),
           ...(dto.lowStockThreshold !== undefined && {
             lowStockThreshold: dto.lowStockThreshold,
@@ -339,7 +373,10 @@ export class InventoryService {
       });
 
       // Replace categories if either list is provided
-      if (dto.primaryCategoryIds !== undefined || dto.secondaryCategoryIds !== undefined) {
+      if (
+        dto.primaryCategoryIds !== undefined ||
+        dto.secondaryCategoryIds !== undefined
+      ) {
         await tx.drugCategoryMap.deleteMany({ where: { drugId } });
         const allCategoryIds = [
           ...(dto.primaryCategoryIds ?? []),
@@ -367,7 +404,10 @@ export class InventoryService {
         await tx.drugContraindication.deleteMany({ where: { drugId } });
         if (dto.contraindications.length) {
           await tx.drugContraindication.createMany({
-            data: dto.contraindications.map((contraindication) => ({ drugId, contraindication })),
+            data: dto.contraindications.map((contraindication) => ({
+              drugId,
+              contraindication,
+            })),
           });
         }
       }
@@ -375,7 +415,7 @@ export class InventoryService {
       return updatedDrug;
     });
 
-    await this.eventBus.emit(EVENTS.INVENTORY.DRUG_UPDATED, {
+    this.eventBus.emit(EVENTS.INVENTORY.DRUG_UPDATED, {
       drugId,
       branchId: drug.branchId,
       pharmacyId: '',
@@ -397,7 +437,7 @@ export class InventoryService {
 
     await this.prisma.drug.delete({ where: { id: drugId } });
 
-    await this.eventBus.emit(EVENTS.INVENTORY.DRUG_REMOVED, {
+    this.eventBus.emit(EVENTS.INVENTORY.DRUG_REMOVED, {
       drugId,
       branchId: drug.branchId,
       pharmacyId: '',
@@ -453,7 +493,7 @@ export class InventoryService {
     });
     const pharmacyId = branch?.pharmacyId ?? '';
 
-    await this.eventBus.emit(EVENTS.INVENTORY.STOCK_UPDATED, {
+    this.eventBus.emit(EVENTS.INVENTORY.STOCK_UPDATED, {
       drugId,
       branchId: drug.branchId,
       pharmacyId,
@@ -464,7 +504,7 @@ export class InventoryService {
 
     // Fire specific low-stock / out-of-stock events
     if (newQuantity === 0 && previousQuantity > 0) {
-      await this.eventBus.emit(EVENTS.INVENTORY.STOCK_OUT, {
+      this.eventBus.emit(EVENTS.INVENTORY.STOCK_OUT, {
         drugId,
         branchId: drug.branchId,
         pharmacyId,
@@ -475,7 +515,7 @@ export class InventoryService {
       newQuantity <= drug.lowStockThreshold &&
       previousQuantity > drug.lowStockThreshold
     ) {
-      await this.eventBus.emit(EVENTS.INVENTORY.STOCK_LOW, {
+      this.eventBus.emit(EVENTS.INVENTORY.STOCK_LOW, {
         drugId,
         branchId: drug.branchId,
         pharmacyId,
@@ -533,7 +573,9 @@ export class InventoryService {
       this.prisma.drug.findMany({
         where,
         include: {
-          categories: { include: { category: { select: { id: true, name: true } } } },
+          categories: {
+            include: { category: { select: { id: true, name: true } } },
+          },
           images: { where: { sortOrder: 0 }, take: 1 },
         },
         orderBy: { name: 'asc' },
@@ -566,8 +608,12 @@ export class InventoryService {
     const [total, inStock, lowStock, outOfStock, expiringSoon] =
       await Promise.all([
         this.prisma.drug.count({ where: { branchId } }),
-        this.prisma.drug.count({ where: { branchId, stockStatus: 'in_stock' } }),
-        this.prisma.drug.count({ where: { branchId, stockStatus: 'low_stock' } }),
+        this.prisma.drug.count({
+          where: { branchId, stockStatus: 'in_stock' },
+        }),
+        this.prisma.drug.count({
+          where: { branchId, stockStatus: 'low_stock' },
+        }),
         this.prisma.drug.count({
           where: { branchId, stockStatus: 'out_of_stock' },
         }),
@@ -676,8 +722,8 @@ export class InventoryService {
         pharmacyId,
         isActive: true,
         OR: [
-          { branchId: branchId },  // branch-specific staff
-          { branchId: null },      // pharmacy-wide staff
+          { branchId: branchId }, // branch-specific staff
+          { branchId: null }, // pharmacy-wide staff
         ],
       },
     });
@@ -762,7 +808,14 @@ export class InventoryService {
     const categories = await this.prisma.drugCategory.findMany({
       where: { isActive: true, ...(type ? { type } : {}) },
       orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
-      select: { id: true, type: true, name: true, slug: true, description: true, sortOrder: true },
+      select: {
+        id: true,
+        type: true,
+        name: true,
+        slug: true,
+        description: true,
+        sortOrder: true,
+      },
     });
 
     // Group by type for convenience

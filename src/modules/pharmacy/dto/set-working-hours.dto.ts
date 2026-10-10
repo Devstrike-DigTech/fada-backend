@@ -31,20 +31,26 @@ export class WorkingHourEntryDto {
 
   @ApiPropertyOptional({
     example: '08:00',
-    description: 'Opening time in HH:mm format (24h). Required if isClosed is false.',
+    description:
+      'Opening time in HH:mm format (24h). Required if isClosed is false.',
   })
   @IsOptional()
   @IsString()
-  @Matches(TIME_REGEX, { message: 'openTime must be in HH:mm format (e.g. 08:00)' })
+  @Matches(TIME_REGEX, {
+    message: 'openTime must be in HH:mm format (e.g. 08:00)',
+  })
   openTime?: string;
 
   @ApiPropertyOptional({
     example: '20:00',
-    description: 'Closing time in HH:mm format (24h). Required if isClosed is false.',
+    description:
+      'Closing time in HH:mm format (24h). Required if isClosed is false.',
   })
   @IsOptional()
   @IsString()
-  @Matches(TIME_REGEX, { message: 'closeTime must be in HH:mm format (e.g. 20:00)' })
+  @Matches(TIME_REGEX, {
+    message: 'closeTime must be in HH:mm format (e.g. 20:00)',
+  })
   closeTime?: string;
 
   @ApiProperty({

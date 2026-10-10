@@ -71,6 +71,7 @@ enum StockStatus {
 enum ReservationStatus {
   pending
   confirmed
+  ready
   served
   cancelled
   expired
@@ -107,6 +108,35 @@ enum PaymentStatus {
   refunded
 }
 
+enum BillingPurpose {
+  new_subscription
+  renewal
+  plan_change
+  ad_campaign
+}
+
+enum AdReviewStatus {
+  pending
+  approved
+  rejected
+}
+
+enum AdEventType {
+  impression
+  click
+}
+
+enum PromotionDiscountType {
+  percentage
+  fixed_amount
+}
+
+enum PromotionScope {
+  subscriptions
+  ads
+  both
+}
+
 enum AdCampaignStatus {
   draft
   active
@@ -121,6 +151,7 @@ enum PointsReason {
   drug_added
   ad_launched
   profile_completed
+  admin_adjustment
   other
 }
 
@@ -134,6 +165,25 @@ enum NotificationType {
 enum DevicePlatform {
   ios
   android
+  web
+}
+
+enum NotificationCategory {
+  reservation
+  inventory
+  billing
+  ads
+  points
+  account
+  system
+  marketing
+}
+
+enum NotificationStatus {
+  queued
+  sent
+  failed
+  skipped
 }
 
 enum SupportTicketStatus {
@@ -149,6 +199,25 @@ enum FeatureSuggestionStatus {
   planned
   shipped
   declined
+}
+
+enum SupportTicketPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum ContentFormat {
+  markdown
+  html
+  json
+}
+
+enum GoodCauseProjectStatus {
+  upcoming
+  active
+  completed
 }
 
 enum SearchType {
@@ -173,42 +242,43 @@ enum PrescriptionType {
 // ─────────────────────────────────────────────
 
 model User {
-  id               String         @id @default(uuid())
-  fadaId           String         @unique @map("fada_id")
-  email            String         @unique
-  firstName        String?        @map("first_name")
-  lastName         String?        @map("last_name")
-  avatarUrl        String?        @map("avatar_url")
-  passwordHash     String?        @map("password_hash")
-  phone            String?        @unique
-  phoneVerified    Boolean        @default(false) @map("phone_verified")
-  role             UserRole
-  googleId         String?        @unique @map("google_id")
-  appleId          String?        @unique @map("apple_id")
-  isEmailVerified  Boolean        @default(false) @map("is_email_verified")
-  isActive         Boolean        @default(false) @map("is_active")
-  createdAt        DateTime       @default(now()) @map("created_at")
-  updatedAt        DateTime       @updatedAt @map("updated_at")
+  id              String   @id @default(uuid())
+  fadaId          String   @unique @map("fada_id")
+  email           String   @unique
+  firstName       String?  @map("first_name")
+  lastName        String?  @map("last_name")
+  avatarUrl       String?  @map("avatar_url")
+  passwordHash    String?  @map("password_hash")
+  phone           String?  @unique
+  phoneVerified   Boolean  @default(false) @map("phone_verified")
+  role            UserRole
+  googleId        String?  @unique @map("google_id")
+  appleId         String?  @unique @map("apple_id")
+  isEmailVerified Boolean  @default(false) @map("is_email_verified")
+  isActive        Boolean  @default(false) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-  customerProfile      CustomerProfile?
-  pharmacistProfile    PharmacistProfile?
-  pcnVerifications     PharmacistProfile[] @relation("PcnVerifiedBy")
-  staffMemberships     PharmacyStaff[]     @relation("StaffMember")
-  staffInvited         PharmacyStaff[]     @relation("StaffInvitedBy")
-  sentStaffInvites     PharmacyStaffInvite[] @relation("InviteSentBy")
-  addresses          CustomerAddress[]
-  pointsLedger       PointsLedger?
-  notifications      NotificationRecord[]
-  deviceTokens       DeviceToken[]
-  savedDrugs         CustomerSavedDrug[]
-  savedPharmacies    CustomerSavedPharmacy[]
-  drugLists          CustomerDrugList[]
-  searchHistory      CustomerSearchHistory[]
-  supportTickets     SupportTicket[]
-  featureSuggestions FeatureSuggestion[]
-  reservations       Reservation[]          @relation("CustomerReservations")
-  servedReservations Reservation[]          @relation("ServedReservations")
-  cancelledReservations Reservation[]       @relation("CancelledReservations")
+  customerProfile        CustomerProfile?
+  pharmacistProfile      PharmacistProfile?
+  pcnVerifications       PharmacistProfile[]     @relation("PcnVerifiedBy")
+  staffMemberships       PharmacyStaff[]         @relation("StaffMember")
+  staffInvited           PharmacyStaff[]         @relation("StaffInvitedBy")
+  sentStaffInvites       PharmacyStaffInvite[]   @relation("InviteSentBy")
+  addresses              CustomerAddress[]
+  pointsLedger           PointsLedger?
+  notifications          NotificationRecord[]
+  deviceTokens           DeviceToken[]
+  notificationPreference NotificationPreference?
+  savedDrugs             CustomerSavedDrug[]
+  savedPharmacies        CustomerSavedPharmacy[]
+  drugLists              CustomerDrugList[]
+  searchHistory          CustomerSearchHistory[]
+  supportTickets         SupportTicket[]
+  featureSuggestions     FeatureSuggestion[]
+  reservations           Reservation[]           @relation("CustomerReservations")
+  servedReservations     Reservation[]           @relation("ServedReservations")
+  cancelledReservations  Reservation[]           @relation("CancelledReservations")
 
   @@map("users")
 }
@@ -229,19 +299,19 @@ model CustomerProfile {
 }
 
 model PharmacistProfile {
-  id               String                   @id @default(uuid())
-  userId           String                   @unique @map("user_id")
-  firstName        String                   @map("first_name")
-  lastName         String                   @map("last_name")
-  licenseType      String                   @map("license_type")
-  licenseNumber    String                   @map("license_number")
-  pcnVerified              Boolean                  @default(false) @map("pcn_verified")
-  pcnVerifiedAt            DateTime?                @map("pcn_verified_at")
-  pcnVerificationSource    String?                  @map("pcn_verification_source")
-  pcnOverrideNote          String?                  @map("pcn_override_note") @db.Text
-  pcnVerifiedById          String?                  @map("pcn_verified_by_id")
-  pharmacyId               String?                  @map("pharmacy_id")
-  roleInPharmacy           PharmacistRoleInPharmacy @default(owner) @map("role_in_pharmacy")
+  id                    String                   @id @default(uuid())
+  userId                String                   @unique @map("user_id")
+  firstName             String                   @map("first_name")
+  lastName              String                   @map("last_name")
+  licenseType           String                   @map("license_type")
+  licenseNumber         String                   @map("license_number")
+  pcnVerified           Boolean                  @default(false) @map("pcn_verified")
+  pcnVerifiedAt         DateTime?                @map("pcn_verified_at")
+  pcnVerificationSource String?                  @map("pcn_verification_source")
+  pcnOverrideNote       String?                  @map("pcn_override_note") @db.Text
+  pcnVerifiedById       String?                  @map("pcn_verified_by_id")
+  pharmacyId            String?                  @map("pharmacy_id")
+  roleInPharmacy        PharmacistRoleInPharmacy @default(owner) @map("role_in_pharmacy")
 
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   pharmacy      Pharmacy? @relation(fields: [pharmacyId], references: [id])
@@ -273,30 +343,30 @@ model CustomerAddress {
 // ─────────────────────────────────────────────
 
 model Pharmacy {
-  id               String   @id @default(uuid())
-  fadaId           String   @unique @map("fada_id")
-  ownerId          String   @map("owner_id")
+  id               String    @id @default(uuid())
+  fadaId           String    @unique @map("fada_id")
+  ownerId          String    @map("owner_id")
   name             String
   email            String?
   phone            String?
-  description      String?  @db.Text
-  cacNumber        String?  @map("cac_number")
-  cacVerified      Boolean  @default(false) @map("cac_verified")
+  description      String?   @db.Text
+  cacNumber        String?   @map("cac_number")
+  cacVerified      Boolean   @default(false) @map("cac_verified")
   cacVerifiedAt    DateTime? @map("cac_verified_at")
-  country          String   @default("Nigeria")
+  country          String    @default("Nigeria")
   state            String?
   city             String?
   address          String?
   landmark         String?
   latitude         Float?
   longitude        Float?
-  foundedYear      Int?     @map("founded_year")
-  isVerified       Boolean  @default(false) @map("is_verified")
-  isActive         Boolean  @default(true) @map("is_active")
-  reputationLevel  Int      @default(1) @map("reputation_level")
-  reputationPoints Int      @default(0) @map("reputation_points")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  foundedYear      Int?      @map("founded_year")
+  isVerified       Boolean   @default(false) @map("is_verified")
+  isActive         Boolean   @default(true) @map("is_active")
+  reputationLevel  Int       @default(1) @map("reputation_level")
+  reputationPoints Int       @default(0) @map("reputation_points")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   branches           Branch[]
   images             PharmacyImage[]
@@ -306,6 +376,8 @@ model Pharmacy {
   subscription       PharmacySubscription?
   adCampaigns        AdCampaign[]
   savedByCustomers   CustomerSavedPharmacy[]
+  pointsLedger       PointsLedger?
+  dailyStats         PharmacyDailyStat[]
 
   @@map("pharmacies")
 }
@@ -424,41 +496,41 @@ model DrugCategory {
 }
 
 model Drug {
-  id                 String      @id @default(uuid())
-  branchId           String      @map("branch_id")
-  nafdacNumber       String?     @map("nafdac_number")
-  nafdacVerified     Boolean     @default(false) @map("nafdac_verified")
-  name               String
-  genericName        String?     @map("generic_name")
-  aliasName          String?     @map("alias_name")
-  manufacturer       String?
-  composition        String?     @db.Text
-  drugType           DrugType    @default(oral) @map("drug_type")
-  packageType        String?     @map("package_type")
-  adultDosage        String?     @map("adult_dosage")
-  childrenDosage     String?     @map("children_dosage")
-  price              Decimal     @db.Decimal(12, 2)
-  currency           String      @default("NGN")
-  stockAmount        Int         @default(0) @map("stock_amount")
-  stockStatus        StockStatus @default(in_stock) @map("stock_status")
-  lowStockThreshold  Int         @default(5) @map("low_stock_threshold")
-  prescriptionType   PrescriptionType? @map("prescription_type")
-  expiryDate         DateTime?   @map("expiry_date") @db.Date
-  createdAt          DateTime    @default(now()) @map("created_at")
-  updatedAt          DateTime    @updatedAt @map("updated_at")
+  id                String            @id @default(uuid())
+  branchId          String            @map("branch_id")
+  nafdacNumber      String?           @map("nafdac_number")
+  nafdacVerified    Boolean           @default(false) @map("nafdac_verified")
+  name              String
+  genericName       String?           @map("generic_name")
+  aliasName         String?           @map("alias_name")
+  manufacturer      String?
+  composition       String?           @db.Text
+  drugType          DrugType          @default(oral) @map("drug_type")
+  packageType       String?           @map("package_type")
+  adultDosage       String?           @map("adult_dosage")
+  childrenDosage    String?           @map("children_dosage")
+  price             Decimal           @db.Decimal(12, 2)
+  currency          String            @default("NGN")
+  stockAmount       Int               @default(0) @map("stock_amount")
+  stockStatus       StockStatus       @default(in_stock) @map("stock_status")
+  lowStockThreshold Int               @default(5) @map("low_stock_threshold")
+  prescriptionType  PrescriptionType? @map("prescription_type")
+  expiryDate        DateTime?         @map("expiry_date") @db.Date
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
 
-  branch                Branch                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  categories            DrugCategoryMap[]
-  indications           DrugIndication[]
-  contraindications     DrugContraindication[]
-  ailmentTags           DrugAilmentTag[]
-  images                DrugImage[]
-  alternatives          DrugAlternative[]      @relation("DrugAlternatives")
-  alternativeOf         DrugAlternative[]      @relation("AlternativeDrugs")
-  reservationItems      ReservationItem[]
-  adCampaigns           AdCampaign[]
-  savedByCustomers      CustomerSavedDrug[]
-  drugListItems         CustomerDrugListItem[]
+  branch            Branch                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  categories        DrugCategoryMap[]
+  indications       DrugIndication[]
+  contraindications DrugContraindication[]
+  ailmentTags       DrugAilmentTag[]
+  images            DrugImage[]
+  alternatives      DrugAlternative[]      @relation("DrugAlternatives")
+  alternativeOf     DrugAlternative[]      @relation("AlternativeDrugs")
+  reservationItems  ReservationItem[]
+  adCampaigns       AdCampaign[]
+  savedByCustomers  CustomerSavedDrug[]
+  drugListItems     CustomerDrugListItem[]
 
   @@index([branchId])
   @@index([stockStatus])
@@ -487,9 +559,9 @@ model DrugIndication {
 }
 
 model DrugContraindication {
-  id                String @id @default(uuid())
-  drugId            String @map("drug_id")
-  contraindication  String
+  id               String @id @default(uuid())
+  drugId           String @map("drug_id")
+  contraindication String
 
   drug Drug @relation(fields: [drugId], references: [id], onDelete: Cascade)
 
@@ -508,7 +580,7 @@ model AilmentTag {
 }
 
 model DrugAilmentTag {
-  drugId      String @map("drug_id")
+  drugId       String @map("drug_id")
   ailmentTagId String @map("ailment_tag_id")
 
   drug       Drug       @relation(fields: [drugId], references: [id], onDelete: Cascade)
@@ -577,34 +649,37 @@ model BatchUploadJob {
 // ─────────────────────────────────────────────
 
 model Reservation {
-  id                String            @id @default(uuid())
-  customerId        String            @map("customer_id")
-  branchId          String            @map("branch_id")
-  qrCodeUrl         String?           @map("qr_code_url")
-  alphanumericCode  String            @unique @map("alphanumeric_code")
-  status            ReservationStatus @default(pending)
-  notes             String?           @db.Text
-  totalAmount       Decimal?          @map("total_amount") @db.Decimal(12, 2)
-  expiresAt         DateTime          @map("expires_at")
-  servedBy          String?           @map("served_by")
-  servedAt          DateTime?         @map("served_at")
-  cancelledBy       String?           @map("cancelled_by")
-  cancelledAt       DateTime?         @map("cancelled_at")
-  createdAt         DateTime          @default(now()) @map("created_at")
-  updatedAt         DateTime          @updatedAt @map("updated_at")
+  id               String            @id @default(uuid())
+  customerId       String            @map("customer_id")
+  branchId         String            @map("branch_id")
+  qrCodeUrl        String?           @map("qr_code_url")
+  alphanumericCode String            @unique @map("alphanumeric_code")
+  status           ReservationStatus @default(pending)
+  notes            String?           @db.Text
+  totalAmount      Decimal?          @map("total_amount") @db.Decimal(12, 2)
+  expiresAt        DateTime          @map("expires_at")
+  servedBy         String?           @map("served_by")
+  servedAt         DateTime?         @map("served_at")
+  cancelledBy      String?           @map("cancelled_by")
+  cancelledAt      DateTime?         @map("cancelled_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
 
-  customer         User                       @relation("CustomerReservations", fields: [customerId], references: [id])
-  branch           Branch                     @relation(fields: [branchId], references: [id])
-  servedByUser     User?                      @relation("ServedReservations", fields: [servedBy], references: [id])
-  cancelledByUser  User?                      @relation("CancelledReservations", fields: [cancelledBy], references: [id])
-  items            ReservationItem[]
-  statusHistory    ReservationStatusHistory[]
+  customer        User                       @relation("CustomerReservations", fields: [customerId], references: [id])
+  branch          Branch                     @relation(fields: [branchId], references: [id])
+  servedByUser    User?                      @relation("ServedReservations", fields: [servedBy], references: [id])
+  cancelledByUser User?                      @relation("CancelledReservations", fields: [cancelledBy], references: [id])
+  items           ReservationItem[]
+  statusHistory   ReservationStatusHistory[]
 
   @@index([customerId])
   @@index([branchId])
   @@index([status])
   @@index([alphanumericCode])
   @@index([expiresAt])
+  @@index([createdAt])
+  @@index([servedAt])
+  @@index([cancelledAt])
   @@map("reservations")
 }
 
@@ -634,6 +709,7 @@ model ReservationStatusHistory {
 
   reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
 
+  @@index([toStatus, changedAt])
   @@map("reservation_status_history")
 }
 
@@ -642,62 +718,95 @@ model ReservationStatusHistory {
 // ─────────────────────────────────────────────
 
 model SubscriptionPlan {
-  id               String  @id @default(uuid())
-  name             String
-  slug             String  @unique
-  color            String?
-  monthlyPrice     Decimal @map("monthly_price") @db.Decimal(10, 2)
-  quarterlyPrice   Decimal? @map("quarterly_price") @db.Decimal(10, 2)
-  annualPrice      Decimal? @map("annual_price") @db.Decimal(10, 2)
-  inventorySlotLimit Int   @map("inventory_slot_limit")
-  branchLimit      Int     @default(1) @map("branch_limit")
-  hasAnalytics     Boolean @default(false) @map("has_analytics")
-  hasAds           Boolean @default(false) @map("has_ads")
-  adDiscountPct    Int     @default(0) @map("ad_discount_pct")
-  sortOrder        Int     @default(0) @map("sort_order")
-  isActive         Boolean @default(true) @map("is_active")
+  id                 String   @id @default(uuid())
+  name               String
+  slug               String   @unique
+  color              String?
+  monthlyPrice       Decimal  @map("monthly_price") @db.Decimal(10, 2)
+  quarterlyPrice     Decimal? @map("quarterly_price") @db.Decimal(10, 2)
+  annualPrice        Decimal? @map("annual_price") @db.Decimal(10, 2)
+  inventorySlotLimit Int      @map("inventory_slot_limit")
+  branchLimit        Int      @default(1) @map("branch_limit")
+  hasAnalytics       Boolean  @default(false) @map("has_analytics")
+  hasAds             Boolean  @default(false) @map("has_ads")
+  adDiscountPct      Int      @default(0) @map("ad_discount_pct")
+  sortOrder          Int      @default(0) @map("sort_order")
+  isActive           Boolean  @default(true) @map("is_active")
+  description        String?
+  /// Provider-side recurring plan codes, e.g. { "paystack": { "monthly": "PLN_x" } }
+  providerPlanCodes  Json?    @map("provider_plan_codes")
 
-  subscriptions PharmacySubscription[]
+  subscriptions        PharmacySubscription[] @relation("CurrentPlan")
+  pendingSubscriptions PharmacySubscription[] @relation("PendingPlan")
 
   @@map("subscription_plans")
 }
 
 model PharmacySubscription {
-  id                       String             @id @default(uuid())
-  pharmacyId               String             @unique @map("pharmacy_id")
-  planId                   String             @map("plan_id")
-  billingInterval          BillingInterval    @map("billing_interval")
-  status                   SubscriptionStatus @default(trialing)
-  paystackSubscriptionCode String?            @map("paystack_subscription_code")
-  paystackCustomerCode     String?            @map("paystack_customer_code")
-  flutterwavePlanId        String?            @map("flutterwave_plan_id")
-  currentPeriodStart       DateTime           @map("current_period_start")
-  currentPeriodEnd         DateTime           @map("current_period_end")
-  cancelledAt              DateTime?          @map("cancelled_at")
-  createdAt                DateTime           @default(now()) @map("created_at")
-  updatedAt                DateTime           @updatedAt @map("updated_at")
+  id                        String             @id @default(uuid())
+  pharmacyId                String             @unique @map("pharmacy_id")
+  planId                    String             @map("plan_id")
+  billingInterval           BillingInterval    @map("billing_interval")
+  status                    SubscriptionStatus @default(trialing)
+  paystackSubscriptionCode  String?            @map("paystack_subscription_code")
+  paystackCustomerCode      String?            @map("paystack_customer_code")
+  flutterwavePlanId         String?            @map("flutterwave_plan_id")
+  paymentProvider           PaymentProvider?   @map("payment_provider")
+  /// Reusable card authorization returned by Paystack on first successful charge
+  paystackAuthorizationCode String?            @map("paystack_authorization_code")
+  currentPeriodStart        DateTime           @map("current_period_start")
+  currentPeriodEnd          DateTime           @map("current_period_end")
+  cancelledAt               DateTime?          @map("cancelled_at")
+  /// Scheduled plan change applied at the next renewal (downgrades, late upgrades)
+  pendingPlanId             String?            @map("pending_plan_id")
+  pendingBillingInterval    BillingInterval?   @map("pending_billing_interval")
+  lastPlanChangeAt          DateTime?          @map("last_plan_change_at")
+  /// End of the grace window after a failed renewal before downgrade to the free plan
+  graceUntil                DateTime?          @map("grace_until")
+  createdAt                 DateTime           @default(now()) @map("created_at")
+  updatedAt                 DateTime           @updatedAt @map("updated_at")
 
-  pharmacy       Pharmacy         @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
-  plan           SubscriptionPlan @relation(fields: [planId], references: [id])
+  pharmacy       Pharmacy          @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  plan           SubscriptionPlan  @relation("CurrentPlan", fields: [planId], references: [id])
+  pendingPlan    SubscriptionPlan? @relation("PendingPlan", fields: [pendingPlanId], references: [id])
   billingRecords BillingRecord[]
 
   @@index([pharmacyId, status])
+  @@index([status, currentPeriodEnd])
   @@map("pharmacy_subscriptions")
 }
 
 model BillingRecord {
-  id               String          @id @default(uuid())
-  subscriptionId   String          @map("subscription_id")
-  amount           Decimal         @db.Decimal(10, 2)
-  currency         String          @default("NGN")
-  paymentProvider  PaymentProvider @map("payment_provider")
-  providerReference String?        @map("provider_reference")
-  status           PaymentStatus   @default(pending)
-  paidAt           DateTime?       @map("paid_at")
-  createdAt        DateTime        @default(now()) @map("created_at")
+  id                String           @id @default(uuid())
+  subscriptionId    String           @map("subscription_id")
+  amount            Decimal          @db.Decimal(10, 2)
+  currency          String           @default("NGN")
+  paymentProvider   PaymentProvider  @map("payment_provider")
+  providerReference String?          @unique @map("provider_reference")
+  status            PaymentStatus    @default(pending)
+  purpose           BillingPurpose   @default(new_subscription)
+  /// Plan + interval this payment is for (used to activate on webhook without trusting provider metadata)
+  planId            String?          @map("plan_id")
+  billingInterval   BillingInterval? @map("billing_interval")
+  description       String?
+  failureReason     String?          @map("failure_reason")
+  providerMetadata  Json?            @map("provider_metadata")
+  /// Ad campaign this payment funds (purpose = ad_campaign)
+  adCampaignId      String?          @map("ad_campaign_id")
+  /// Promotion applied to this charge, if any
+  promotionId       String?          @map("promotion_id")
+  listAmount        Decimal?         @map("list_amount") @db.Decimal(10, 2)
+  discountNgn       Decimal?         @map("discount_ngn") @db.Decimal(10, 2)
+  paidAt            DateTime?        @map("paid_at")
+  createdAt         DateTime         @default(now()) @map("created_at")
 
-  subscription PharmacySubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  subscription PharmacySubscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  adCampaign   AdCampaign?           @relation(fields: [adCampaignId], references: [id], onDelete: SetNull)
+  promotion    Promotion?            @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  redemptions  PromotionRedemption[]
 
+  @@index([subscriptionId, createdAt])
+  @@index([adCampaignId])
   @@map("billing_records")
 }
 
@@ -706,59 +815,220 @@ model BillingRecord {
 // ─────────────────────────────────────────────
 
 model AdCampaign {
-  id             String           @id @default(uuid())
-  pharmacyId     String           @map("pharmacy_id")
-  drugId         String?          @map("drug_id")
-  title          String
-  description    String?          @db.Text
-  creativeUrl    String?          @map("creative_url")
-  targetRadiusKm Int              @default(10) @map("target_radius_km")
-  targetState    String?          @map("target_state")
-  timeslotStart  DateTime         @map("timeslot_start")
-  timeslotEnd    DateTime         @map("timeslot_end")
-  budgetNgn      Decimal?         @map("budget_ngn") @db.Decimal(10, 2)
-  status         AdCampaignStatus @default(draft)
-  impressionsCount Int            @default(0) @map("impressions_count")
-  clicksCount    Int              @default(0) @map("clicks_count")
-  rating         Decimal?         @db.Decimal(3, 2)
-  createdAt      DateTime         @default(now()) @map("created_at")
-  updatedAt      DateTime         @updatedAt @map("updated_at")
+  id                   String    @id @default(uuid())
+  pharmacyId           String    @map("pharmacy_id")
+  drugId               String?   @map("drug_id")
+  title                String
+  subtitle             String?
+  description          String?   @db.Text
+  specialPointsTitle   String?   @map("special_points_title")
+  /// Bullet points shown on the customer "Ad Info" screen
+  specialPoints        Json?     @map("special_points")
+  creativeUrl          String?   @map("creative_url")
+  creativeCloudinaryId String?   @map("creative_cloudinary_id")
+  /// Promotions can be limited to one drug type (Orals, Infusions, …)
+  drugTypeFilter       DrugType? @map("drug_type_filter")
+  targetRadiusKm       Int       @default(10) @map("target_radius_km")
+  targetState          String?   @map("target_state")
+  /// Serving centre — snapshot of the head branch location at creation
+  targetLatitude       Float?    @map("target_latitude")
+  targetLongitude      Float?    @map("target_longitude")
+  timeslotStart        DateTime  @map("timeslot_start")
+  timeslotEnd          DateTime  @map("timeslot_end")
 
-  pharmacy Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
-  drug     Drug?    @relation(fields: [drugId], references: [id], onDelete: SetNull)
+  // ── Pricing: rate × dailyFrequency × weeklyDays × durationWeeks, less discounts ──
+  dailyFrequency       Int       @default(1) @map("daily_frequency")
+  weeklyDays           Int       @default(7) @map("weekly_days")
+  durationWeeks        Int       @default(1) @map("duration_weeks")
+  baseRateNgn          Decimal   @default(250) @map("base_rate_ngn") @db.Decimal(10, 2)
+  listPriceNgn         Decimal   @default(0) @map("list_price_ngn") @db.Decimal(10, 2)
+  planDiscountPct      Int       @default(0) @map("plan_discount_pct")
+  promotionId          String?   @map("promotion_id")
+  promotionDiscountNgn Decimal   @default(0) @map("promotion_discount_ngn") @db.Decimal(10, 2)
+  priceNgn             Decimal   @default(0) @map("price_ngn") @db.Decimal(10, 2)
+  budgetNgn            Decimal?  @map("budget_ngn") @db.Decimal(10, 2)
+  paidAt               DateTime? @map("paid_at")
+
+  // ── Lifecycle & back-office review ──
+  status          AdCampaignStatus @default(draft)
+  reviewStatus    AdReviewStatus   @default(pending) @map("review_status")
+  reviewedById    String?          @map("reviewed_by_id")
+  reviewedAt      DateTime?        @map("reviewed_at")
+  rejectionReason String?          @map("rejection_reason")
+  activatedAt     DateTime?        @map("activated_at")
+  pausedAt        DateTime?        @map("paused_at")
+  cancelledAt     DateTime?        @map("cancelled_at")
+
+  // ── Counters (denormalised from ad_events / ad_ratings) ──
+  impressionsCount Int      @default(0) @map("impressions_count")
+  clicksCount      Int      @default(0) @map("clicks_count")
+  rating           Decimal? @db.Decimal(3, 2)
+  ratingCount      Int      @default(0) @map("rating_count")
+  ratingSum        Int      @default(0) @map("rating_sum")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  pharmacy       Pharmacy              @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  drug           Drug?                 @relation(fields: [drugId], references: [id], onDelete: SetNull)
+  promotion      Promotion?            @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  events         AdEvent[]
+  ratings        AdRating[]
+  billingRecords BillingRecord[]
+  redemptions    PromotionRedemption[]
 
   @@index([status, timeslotEnd])
+  @@index([pharmacyId, status])
+  @@index([status, reviewStatus, timeslotStart])
   @@map("ad_campaigns")
+}
+
+model AdEvent {
+  id         String      @id @default(uuid())
+  campaignId String      @map("campaign_id")
+  type       AdEventType
+  customerId String?     @map("customer_id")
+  guestToken String?     @map("guest_token")
+  latitude   Float?
+  longitude  Float?
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  campaign AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, type, createdAt])
+  @@map("ad_events")
+}
+
+model AdRating {
+  id         String   @id @default(uuid())
+  campaignId String   @map("campaign_id")
+  customerId String   @map("customer_id")
+  stars      Int
+  comment    String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  campaign AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, customerId])
+  @@map("ad_ratings")
+}
+
+// ─────────────────────────────────────────────
+// PROMOTIONS (back-office seasonal discounts)
+// ─────────────────────────────────────────────
+
+model Promotion {
+  id                        String                @id @default(uuid())
+  /// Human code pharmacies can enter (uppercase). Auto-applied promos still get one for reporting.
+  code                      String                @unique
+  name                      String
+  description               String?               @db.Text
+  discountType              PromotionDiscountType @map("discount_type")
+  discountValue             Decimal               @map("discount_value") @db.Decimal(10, 2)
+  /// Cap for percentage promos (₦); null = no cap
+  maxDiscountNgn            Decimal?              @map("max_discount_ngn") @db.Decimal(10, 2)
+  appliesTo                 PromotionScope        @default(both) @map("applies_to")
+  /// Empty = every plan
+  planIds                   String[]              @default([]) @map("plan_ids")
+  /// Empty = every interval
+  billingIntervals          BillingInterval[]     @default([]) @map("billing_intervals")
+  startsAt                  DateTime              @map("starts_at")
+  endsAt                    DateTime?             @map("ends_at")
+  /// Seasonal promos apply without a code; coded promos must be entered
+  autoApply                 Boolean               @default(false) @map("auto_apply")
+  maxRedemptions            Int?                  @map("max_redemptions")
+  maxRedemptionsPerPharmacy Int                   @default(1) @map("max_redemptions_per_pharmacy")
+  redemptionsCount          Int                   @default(0) @map("redemptions_count")
+  isActive                  Boolean               @default(true) @map("is_active")
+  createdById               String?               @map("created_by_id")
+  createdAt                 DateTime              @default(now()) @map("created_at")
+  updatedAt                 DateTime              @updatedAt @map("updated_at")
+
+  redemptions    PromotionRedemption[]
+  billingRecords BillingRecord[]
+  adCampaigns    AdCampaign[]
+
+  @@index([isActive, startsAt, endsAt])
+  @@map("promotions")
+}
+
+model PromotionRedemption {
+  id              String   @id @default(uuid())
+  promotionId     String   @map("promotion_id")
+  pharmacyId      String   @map("pharmacy_id")
+  billingRecordId String?  @map("billing_record_id")
+  adCampaignId    String?  @map("ad_campaign_id")
+  discountNgn     Decimal  @map("discount_ngn") @db.Decimal(10, 2)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  promotion     Promotion      @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  billingRecord BillingRecord? @relation(fields: [billingRecordId], references: [id], onDelete: SetNull)
+  adCampaign    AdCampaign?    @relation(fields: [adCampaignId], references: [id], onDelete: SetNull)
+
+  @@index([promotionId, pharmacyId])
+  @@map("promotion_redemptions")
+}
+
+// ─────────────────────────────────────────────
+// BACK OFFICE
+// ─────────────────────────────────────────────
+
+/// Every money-, plan-, or content-affecting admin action is recorded here.
+model AdminAuditLog {
+  id          String   @id @default(uuid())
+  adminUserId String   @map("admin_user_id")
+  action      String
+  targetType  String   @map("target_type")
+  targetId    String?  @map("target_id")
+  details     Json?
+  ipAddress   String?  @map("ip_address")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([adminUserId, createdAt])
+  @@index([targetType, targetId])
+  @@map("admin_audit_logs")
 }
 
 // ─────────────────────────────────────────────
 // POINTS & REPUTATION
 // ─────────────────────────────────────────────
 
+/// One ledger per owner: a customer (userId) or a pharmacy (pharmacyId). Exactly one is set.
 model PointsLedger {
-  id            String   @id @default(uuid())
-  userId        String   @unique @map("user_id")
-  balance       Int      @default(0)
-  lifetimeEarned Int     @default(0) @map("lifetime_earned")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(uuid())
+  userId         String?  @unique @map("user_id")
+  pharmacyId     String?  @unique @map("pharmacy_id")
+  balance        Int      @default(0)
+  lifetimeEarned Int      @default(0) @map("lifetime_earned")
+  level          Int      @default(1)
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pharmacy     Pharmacy?           @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
   transactions PointsTransaction[]
 
+  @@index([balance])
   @@map("points_ledgers")
 }
 
 model PointsTransaction {
-  id        String       @id @default(uuid())
-  ledgerId  String       @map("ledger_id")
-  delta     Int
-  reason    PointsReason
-  referenceId String?    @map("reference_id")
-  note      String?
-  createdAt DateTime     @default(now()) @map("created_at")
+  id           String       @id @default(uuid())
+  ledgerId     String       @map("ledger_id")
+  delta        Int
+  balanceAfter Int          @default(0) @map("balance_after")
+  reason       PointsReason
+  /// Domain object that earned the points (reservation id, drug id, …). With `reason`
+  /// it forms the idempotency key, so a redelivered event cannot pay twice.
+  referenceId  String?      @map("reference_id")
+  note         String?
+  metadata     Json?
+  createdById  String?      @map("created_by_id")
+  createdAt    DateTime     @default(now()) @map("created_at")
 
   ledger PointsLedger @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
 
+  @@unique([ledgerId, reason, referenceId])
+  @@index([ledgerId, createdAt])
   @@map("points_transactions")
 }
 
@@ -766,34 +1036,69 @@ model PointsTransaction {
 // NOTIFICATIONS
 // ─────────────────────────────────────────────
 
+/// One row per recipient per channel. `in_app` rows are what the apps list as history;
+/// push / sms / email rows carry delivery status for ops.
 model NotificationRecord {
-  id             String           @id @default(uuid())
-  recipientId    String           @map("recipient_id")
+  id             String               @id @default(uuid())
+  recipientId    String               @map("recipient_id")
+  category       NotificationCategory @default(system)
   title          String
-  body           String           @db.Text
+  body           String               @db.Text
   type           NotificationType
-  channelPayload Json?            @map("channel_payload")
-  isRead         Boolean          @default(false) @map("is_read")
-  readAt         DateTime?        @map("read_at")
-  createdAt      DateTime         @default(now()) @map("created_at")
+  /// Deep-link / context data handed to the client (reservationId, screen, …)
+  data           Json?
+  channelPayload Json?                @map("channel_payload")
+  status         NotificationStatus   @default(queued)
+  error          String?
+  attempts       Int                  @default(0)
+  /// Event-derived key; with recipient + type it stops a redelivered event from notifying twice
+  dedupeKey      String?              @map("dedupe_key")
+  sentAt         DateTime?            @map("sent_at")
+  isRead         Boolean              @default(false) @map("is_read")
+  readAt         DateTime?            @map("read_at")
+  createdAt      DateTime             @default(now()) @map("created_at")
 
   recipient User @relation(fields: [recipientId], references: [id], onDelete: Cascade)
 
+  @@unique([recipientId, type, dedupeKey])
   @@index([recipientId, isRead])
+  @@index([recipientId, type, createdAt])
+  @@index([status, createdAt])
   @@map("notification_records")
 }
 
 model DeviceToken {
-  id        String         @id @default(uuid())
-  userId    String         @map("user_id")
-  token     String         @unique
-  platform  DevicePlatform
-  createdAt DateTime       @default(now()) @map("created_at")
-  updatedAt DateTime       @updatedAt @map("updated_at")
+  id         String         @id @default(uuid())
+  userId     String         @map("user_id")
+  token      String         @unique
+  platform   DevicePlatform
+  deviceName String?        @map("device_name")
+  appVersion String?        @map("app_version")
+  isActive   Boolean        @default(true) @map("is_active")
+  lastUsedAt DateTime       @default(now()) @map("last_used_at")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, isActive])
   @@map("device_tokens")
+}
+
+/// Per-user channel toggles and muted categories. Absent row = everything on.
+model NotificationPreference {
+  id              String                 @id @default(uuid())
+  userId          String                 @unique @map("user_id")
+  pushEnabled     Boolean                @default(true) @map("push_enabled")
+  smsEnabled      Boolean                @default(true) @map("sms_enabled")
+  emailEnabled    Boolean                @default(true) @map("email_enabled")
+  /// Categories the user does not want. `account` and `billing` are always delivered.
+  mutedCategories NotificationCategory[] @default([]) @map("muted_categories")
+  updatedAt       DateTime               @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
 }
 
 // ─────────────────────────────────────────────
@@ -871,30 +1176,65 @@ model CustomerSearchHistory {
 // ─────────────────────────────────────────────
 
 model SupportTicket {
-  id            String              @id @default(uuid())
-  submitterId   String?             @map("submitter_id")
-  complaintType String              @map("complaint_type")
-  description   String              @db.Text
-  status        SupportTicketStatus @default(pending)
-  resolvedAt    DateTime?           @map("resolved_at")
-  createdAt     DateTime            @default(now()) @map("created_at")
-  updatedAt     DateTime            @updatedAt @map("updated_at")
+  id             String                @id @default(uuid())
+  /// Human reference shown to users and quoted in emails, e.g. TKT-7K3QX9
+  ticketNumber   String                @unique @map("ticket_number")
+  submitterId    String?               @map("submitter_id")
+  submitterRole  String?               @map("submitter_role")
+  complaintType  String                @map("complaint_type")
+  subject        String                @default("")
+  description    String                @db.Text
+  status         SupportTicketStatus   @default(pending)
+  priority       SupportTicketPriority @default(normal)
+  /// Optional context the complaint is about
+  reservationId  String?               @map("reservation_id")
+  pharmacyId     String?               @map("pharmacy_id")
+  assignedToId   String?               @map("assigned_to_id")
+  resolutionNote String?               @map("resolution_note") @db.Text
+  lastActivityAt DateTime              @default(now()) @map("last_activity_at")
+  resolvedAt     DateTime?             @map("resolved_at")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
 
-  submitter User? @relation(fields: [submitterId], references: [id], onDelete: SetNull)
+  submitter User?                  @relation(fields: [submitterId], references: [id], onDelete: SetNull)
+  messages  SupportTicketMessage[]
 
+  @@index([submitterId, createdAt])
+  @@index([status, priority, lastActivityAt])
   @@map("support_tickets")
+}
+
+/// Conversation on a ticket. `isInternal` notes are visible to admins only.
+model SupportTicketMessage {
+  id         String   @id @default(uuid())
+  ticketId   String   @map("ticket_id")
+  authorId   String?  @map("author_id")
+  isStaff    Boolean  @default(false) @map("is_staff")
+  isInternal Boolean  @default(false) @map("is_internal")
+  body       String   @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_messages")
 }
 
 model FeatureSuggestion {
   id          String                  @id @default(uuid())
   submitterId String?                 @map("submitter_id")
+  area        String                  @default("other")
   title       String
   description String                  @db.Text
   status      FeatureSuggestionStatus @default(submitted)
+  /// Shown to the submitter when the status changes
+  adminNote   String?                 @map("admin_note") @db.Text
   createdAt   DateTime                @default(now()) @map("created_at")
+  updatedAt   DateTime                @default(now()) @updatedAt @map("updated_at")
 
   submitter User? @relation(fields: [submitterId], references: [id], onDelete: SetNull)
 
+  @@index([status, createdAt])
   @@map("feature_suggestions")
 }
 
@@ -908,35 +1248,136 @@ model FeatureFlag {
   @@map("feature_flags")
 }
 
+/// Back-office editable copy. `content` is markdown, html, or a JSON document
+/// (structured pages such as app info, credits, future features, contact).
 model AppContent {
-  id        String   @id @default(uuid())
-  key       String   @unique
-  title     String
-  content   String   @db.Text
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id            String        @id @default(uuid())
+  key           String        @unique
+  title         String
+  content       String        @db.Text
+  format        ContentFormat @default(markdown)
+  /// Bumped on every edit; clients can cache by key + version
+  version       Int           @default(1)
+  isPublished   Boolean       @default(true) @map("is_published")
+  /// Legal effective date (terms, privacy)
+  effectiveDate DateTime?     @map("effective_date")
+  updatedById   String?       @map("updated_by_id")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
 
   @@map("app_content")
 }
 
 model GoodCauseProject {
-  id          String   @id @default(uuid())
-  title       String
-  description String   @db.Text
-  imageUrl    String?  @map("image_url")
-  isActive    Boolean  @default(true) @map("is_active")
-  sortOrder   Int      @default(0) @map("sort_order")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id                String                 @id @default(uuid())
+  title             String
+  summary           String?
+  description       String                 @db.Text
+  imageUrl          String?                @map("image_url")
+  imageCloudinaryId String?                @map("image_cloudinary_id")
+  status            GoodCauseProjectStatus @default(active)
+  targetAmountNgn   Decimal?               @map("target_amount_ngn") @db.Decimal(14, 2)
+  raisedAmountNgn   Decimal                @default(0) @map("raised_amount_ngn") @db.Decimal(14, 2)
+  beneficiaries     Int                    @default(0)
+  /// Nigerian states reached, used for the "States Reached" stat
+  states            String[]               @default([])
+  startDate         DateTime?              @map("start_date")
+  endDate           DateTime?              @map("end_date")
+  isActive          Boolean                @default(true) @map("is_active")
+  sortOrder         Int                    @default(0) @map("sort_order")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @default(now()) @updatedAt @map("updated_at")
 
+  testimonials GoodCauseTestimonial[]
+
+  @@index([isActive, sortOrder])
   @@map("good_cause_projects")
 }
 
 model GoodCauseTestimonial {
-  id          String   @id @default(uuid())
-  authorName  String   @map("author_name")
-  authorAvatar String? @map("author_avatar")
-  content     String   @db.Text
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id                 String   @id @default(uuid())
+  projectId          String?  @map("project_id")
+  authorName         String   @map("author_name")
+  authorAvatar       String?  @map("author_avatar")
+  avatarCloudinaryId String?  @map("avatar_cloudinary_id")
+  authorLocation     String?  @map("author_location")
+  content            String   @db.Text
+  isActive           Boolean  @default(true) @map("is_active")
+  sortOrder          Int      @default(0) @map("sort_order")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at")
 
+  project GoodCauseProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([isActive, sortOrder])
   @@map("good_cause_testimonials")
+}
+
+// ─────────────────────────────────────────────
+// ANALYTICS (daily snapshots, Africa/Lagos calendar days)
+// ─────────────────────────────────────────────
+
+/// One row per pharmacy per day. Written by the nightly snapshot job from the
+/// source tables (reservations, drugs, ad_events, saves) plus Redis search counters.
+model PharmacyDailyStat {
+  id                    String   @id @default(uuid())
+  pharmacyId            String   @map("pharmacy_id")
+  date                  DateTime @db.Date
+  reservationsCreated   Int      @default(0) @map("reservations_created")
+  reservationsServed    Int      @default(0) @map("reservations_served")
+  reservationsCancelled Int      @default(0) @map("reservations_cancelled")
+  reservationsExpired   Int      @default(0) @map("reservations_expired")
+  servedValueNgn        Decimal  @default(0) @map("served_value_ngn") @db.Decimal(14, 2)
+  uniqueCustomers       Int      @default(0) @map("unique_customers")
+  searchAppearances     Int      @default(0) @map("search_appearances")
+  adImpressions         Int      @default(0) @map("ad_impressions")
+  adClicks              Int      @default(0) @map("ad_clicks")
+  drugsAdded            Int      @default(0) @map("drugs_added")
+  newSaves              Int      @default(0) @map("new_saves")
+  /// Top search queries this pharmacy appeared for: [{ query, count }]
+  topQueries            Json?    @map("top_queries")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  pharmacy Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  @@unique([pharmacyId, date])
+  @@index([date])
+  @@map("pharmacy_daily_stats")
+}
+
+/// Most-searched and zero-result queries per day (top 500 per type).
+model SearchTrendDaily {
+  id                 String     @id @default(uuid())
+  date               DateTime   @db.Date
+  query              String
+  searchType         SearchType @map("search_type")
+  searches           Int        @default(0)
+  zeroResultSearches Int        @default(0) @map("zero_result_searches")
+
+  @@unique([date, query, searchType])
+  @@index([date, searches])
+  @@map("search_trends_daily")
+}
+
+/// Platform-wide totals per day for the back office.
+model PlatformDailyStat {
+  id                     String   @id @default(uuid())
+  date                   DateTime @unique @db.Date
+  newCustomers           Int      @default(0) @map("new_customers")
+  newPharmacies          Int      @default(0) @map("new_pharmacies")
+  activePharmacies       Int      @default(0) @map("active_pharmacies")
+  reservationsCreated    Int      @default(0) @map("reservations_created")
+  reservationsServed     Int      @default(0) @map("reservations_served")
+  reservationsCancelled  Int      @default(0) @map("reservations_cancelled")
+  reservationsExpired    Int      @default(0) @map("reservations_expired")
+  servedValueNgn         Decimal  @default(0) @map("served_value_ngn") @db.Decimal(14, 2)
+  searches               Int      @default(0)
+  zeroResultSearches     Int      @default(0) @map("zero_result_searches")
+  adImpressions          Int      @default(0) @map("ad_impressions")
+  adClicks               Int      @default(0) @map("ad_clicks")
+  subscriptionRevenueNgn Decimal  @default(0) @map("subscription_revenue_ngn") @db.Decimal(14, 2)
+  adRevenueNgn           Decimal  @default(0) @map("ad_revenue_ngn") @db.Decimal(14, 2)
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("platform_daily_stats")
 }

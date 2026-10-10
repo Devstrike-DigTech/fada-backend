@@ -1,3 +1,4 @@
+import { Throttle } from '@nestjs/throttler';
 import {
   Body,
   Controller,
@@ -17,8 +18,12 @@ import {
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { Public } from '@common/decorators/public.decorator';
-import { CurrentUser, CurrentUserData } from '@common/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserData,
+} from '@common/decorators/current-user.decorator';
 import { AuthService } from './auth.service';
+import { OAuthConfiguredGuard } from './guards/oauth-configured.guard';
 import { RegisterCustomerDto } from './dto/register-customer.dto';
 import { RegisterPharmacistDto } from './dto/register-pharmacist.dto';
 import { LoginDto } from './dto/login.dto';
@@ -39,10 +44,16 @@ export class AuthController {
   // ─── Bootstrap Super Admin ──────────────────────────────────────────────────
 
   @Post('bootstrap-admin')
+  @Throttle({ medium: { limit: 5, ttl: 3_600_000 } })
   @Public()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'One-time super admin creation (fails if any admin exists)' })
-  @ApiResponse({ status: 201, description: 'Super admin created, tokens issued' })
+  @ApiOperation({
+    summary: 'One-time super admin creation (fails if any admin exists)',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Super admin created, tokens issued',
+  })
   @ApiResponse({ status: 401, description: 'Invalid bootstrap secret' })
   @ApiResponse({ status: 409, description: 'Admin already exists' })
   bootstrapAdmin(@Body() dto: BootstrapAdminDto) {
@@ -52,11 +63,18 @@ export class AuthController {
   // ─── Customer Registration ──────────────────────────────────────────────────
 
   @Post('register/customer')
+  @Throttle({ medium: { limit: 10, ttl: 60_000 } })
   @Public()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new customer account' })
-  @ApiResponse({ status: 201, description: 'OTP sent to email for verification' })
-  @ApiResponse({ status: 409, description: 'Email or phone already registered' })
+  @ApiResponse({
+    status: 201,
+    description: 'OTP sent to email for verification',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Email or phone already registered',
+  })
   registerCustomer(@Body() dto: RegisterCustomerDto) {
     return this.authService.registerCustomer(dto);
   }
@@ -64,11 +82,18 @@ export class AuthController {
   // ─── Pharmacist Registration ────────────────────────────────────────────────
 
   @Post('register/pharmacist')
+  @Throttle({ medium: { limit: 10, ttl: 60_000 } })
   @Public()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new pharmacist account' })
-  @ApiResponse({ status: 201, description: 'OTP sent, PCN verification initiated' })
-  @ApiResponse({ status: 409, description: 'Email or phone already registered' })
+  @ApiResponse({
+    status: 201,
+    description: 'OTP sent, PCN verification initiated',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Email or phone already registered',
+  })
   registerPharmacist(@Body() dto: RegisterPharmacistDto) {
     return this.authService.registerPharmacist(dto);
   }
@@ -76,6 +101,7 @@ export class AuthController {
   // ─── Email OTP Verification ─────────────────────────────────────────────────
 
   @Post('verify-email')
+  @Throttle({ medium: { limit: 10, ttl: 60_000 } })
   @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify email address with OTP code' })
@@ -88,6 +114,7 @@ export class AuthController {
   // ─── Resend OTP ─────────────────────────────────────────────────────────────
 
   @Post('resend-otp')
+  @Throttle({ medium: { limit: 5, ttl: 60_000 } })
   @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend email verification OTP' })
@@ -98,12 +125,16 @@ export class AuthController {
   // ─── Login ──────────────────────────────────────────────────────────────────
 
   @Post('login')
+  @Throttle({ medium: { limit: 20, ttl: 60_000 } })
   @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiResponse({ status: 200, description: 'Login successful, tokens issued' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  @ApiResponse({ status: 403, description: 'Email not verified or account deactivated' })
+  @ApiResponse({
+    status: 403,
+    description: 'Email not verified or account deactivated',
+  })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
@@ -111,6 +142,7 @@ export class AuthController {
   // ─── Refresh Tokens ─────────────────────────────────────────────────────────
 
   @Post('refresh')
+  @Throttle({ medium: { limit: 30, ttl: 60_000 } })
   @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Rotate refresh token and get new access token' })
@@ -136,6 +168,7 @@ export class AuthController {
   // ─── Forgot Password ────────────────────────────────────────────────────────
 
   @Post('forgot-password')
+  @Throttle({ medium: { limit: 5, ttl: 60_000 } })
   @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request a password reset OTP' })
@@ -146,6 +179,7 @@ export class AuthController {
   // ─── Reset Password ─────────────────────────────────────────────────────────
 
   @Post('reset-password')
+  @Throttle({ medium: { limit: 10, ttl: 60_000 } })
   @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password using OTP from email' })
@@ -157,6 +191,7 @@ export class AuthController {
   // ─── Change Password ────────────────────────────────────────────────────────
 
   @Post('change-password')
+  @Throttle({ medium: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Change password while authenticated' })
@@ -183,6 +218,7 @@ export class AuthController {
   // ─── Guest Token ────────────────────────────────────────────────────────────
 
   @Post('guest-token')
+  @Throttle({ medium: { limit: 30, ttl: 60_000 } })
   @Public()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
@@ -199,7 +235,7 @@ export class AuthController {
 
   @Get('google')
   @Public()
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(OAuthConfiguredGuard('google'), AuthGuard('google'))
   @ApiOperation({ summary: 'Initiate Google OAuth login' })
   googleLogin(): void {
     // Passport redirects automatically
@@ -207,7 +243,7 @@ export class AuthController {
 
   @Get('google/callback')
   @Public()
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(OAuthConfiguredGuard('google'), AuthGuard('google'))
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Google OAuth callback — called by Google' })
   googleCallback(@Req() req: Request) {
@@ -218,7 +254,7 @@ export class AuthController {
 
   @Post('apple')
   @Public()
-  @UseGuards(AuthGuard('apple'))
+  @UseGuards(OAuthConfiguredGuard('apple'), AuthGuard('apple'))
   @ApiOperation({ summary: 'Initiate Apple Sign-In' })
   appleLogin(): void {
     // Passport redirects automatically
@@ -226,7 +262,7 @@ export class AuthController {
 
   @Post('apple/callback')
   @Public()
-  @UseGuards(AuthGuard('apple'))
+  @UseGuards(OAuthConfiguredGuard('apple'), AuthGuard('apple'))
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Apple Sign-In callback — called by Apple' })
   appleCallback(@Req() req: Request) {

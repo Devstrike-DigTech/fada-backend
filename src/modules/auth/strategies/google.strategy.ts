@@ -1,11 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
+import { Strategy, Profile, VerifyCallback } from 'passport-google-oauth20';
 import {
-  Strategy,
-  Profile,
-  VerifyCallback,
-} from 'passport-google-oauth20';
+  OAUTH_UNCONFIGURED,
+  isOAuthConfigured,
+} from '../guards/oauth-configured.guard';
 
 export interface GoogleOAuthUser {
   googleId: string;
@@ -19,17 +19,23 @@ export interface GoogleOAuthUser {
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   constructor(configService: ConfigService) {
+    // Placeholders keep boot working without credentials; the guard answers 503
     super({
       clientID:
-        configService.get<string>('auth.google.clientId') ?? 'google-client-id',
+        configService.get<string>('auth.google.clientId') || OAUTH_UNCONFIGURED,
       clientSecret:
-        configService.get<string>('auth.google.clientSecret') ??
-        'google-client-secret',
+        configService.get<string>('auth.google.clientSecret') ||
+        OAUTH_UNCONFIGURED,
       callbackURL:
-        configService.get<string>('auth.google.callbackUrl') ??
+        configService.get<string>('auth.google.callbackUrl') ||
         'http://localhost:3000/api/v1/auth/google/callback',
       scope: ['email', 'profile'],
     });
+    if (!isOAuthConfigured(configService, 'google')) {
+      new Logger(GoogleStrategy.name).warn(
+        'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set — Google sign-in is disabled.',
+      );
+    }
   }
 
   validate(

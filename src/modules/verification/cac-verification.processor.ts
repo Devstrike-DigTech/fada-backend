@@ -4,7 +4,10 @@ import { Job } from 'bull';
 import { PrismaService } from '@infra/database/prisma.service';
 import { EventBusService } from '@infra/events/event-bus.service';
 import { CacRegistryService } from '@infra/registries/cac-registry.service';
-import { EVENTS, CacVerificationRequestedPayload } from '@common/types/events.types';
+import {
+  EVENTS,
+  CacVerificationRequestedPayload,
+} from '@common/types/events.types';
 import { QUEUE_NAMES } from '@infra/queue/queue.constants';
 
 @Processor(QUEUE_NAMES.VERIFICATION_CAC)
@@ -75,7 +78,7 @@ export class CacVerificationProcessor {
     if (isValid) {
       this.logger.log(`CAC verified for pharmacy ${pharmacyId}`);
 
-      await this.eventBus.emit(EVENTS.PHARMACY.CAC_VERIFICATION_COMPLETED, {
+      this.eventBus.emit(EVENTS.PHARMACY.CAC_VERIFICATION_COMPLETED, {
         pharmacyId,
         cacNumber,
         isValid: true,
@@ -83,7 +86,7 @@ export class CacVerificationProcessor {
       });
 
       if (owner) {
-        await this.eventBus.emit(EVENTS.NOTIFICATION.EMAIL_SEND_REQUESTED, {
+        this.eventBus.emit(EVENTS.NOTIFICATION.EMAIL_SEND_REQUESTED, {
           to: owner.user.email,
           subject: 'Your pharmacy CAC registration has been verified ✓',
           templateId: 'cac-verified',
@@ -100,7 +103,7 @@ export class CacVerificationProcessor {
         `CAC verification failed for pharmacy ${pharmacyId} (RC: ${cacNumber})`,
       );
 
-      await this.eventBus.emit(EVENTS.PHARMACY.CAC_VERIFICATION_FAILED, {
+      this.eventBus.emit(EVENTS.PHARMACY.CAC_VERIFICATION_FAILED, {
         pharmacyId,
         cacNumber,
         isValid: false,
@@ -108,7 +111,7 @@ export class CacVerificationProcessor {
       });
 
       if (owner) {
-        await this.eventBus.emit(EVENTS.NOTIFICATION.EMAIL_SEND_REQUESTED, {
+        this.eventBus.emit(EVENTS.NOTIFICATION.EMAIL_SEND_REQUESTED, {
           to: owner.user.email,
           subject: 'CAC verification could not be completed',
           templateId: 'cac-failed',

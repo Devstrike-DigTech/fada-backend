@@ -7,11 +7,14 @@ import {
   MemoryHealthIndicator,
   DiskHealthIndicator,
 } from '@nestjs/terminus';
+import { SkipThrottle } from '@nestjs/throttler';
+import { SKIP_ALL_THROTTLERS } from '@common/security/throttle.constants';
 import { Public } from '@common/decorators/public.decorator';
 import { PrismaService } from '@infra/database/prisma.service';
 import { RedisHealthIndicator } from './redis.health';
 
 @ApiTags('Health')
+@SkipThrottle(SKIP_ALL_THROTTLERS)
 @Controller({ path: 'health', version: '1' })
 export class HealthController {
   constructor(
@@ -48,9 +51,30 @@ export class HealthController {
     ]);
   }
 
+  /** Liveness: the process is up and the event loop answers. No dependencies, so a DB blip never restarts the app. */
+  @Get('live')
+  @Public()
+  @ApiOperation({ summary: 'Liveness probe (process only)' })
+  live(): { status: string; uptimeSeconds: number } {
+    return { status: 'ok', uptimeSeconds: Math.round(process.uptime()) };
+  }
+
+  /** Readiness: dependencies needed to serve traffic. Load balancers route only when this is 200. */
+  @Get('ready')
+  @Public()
+  @HealthCheck()
+  @ApiOperation({ summary: 'Readiness probe (database + Redis)' })
+  ready() {
+    return this.health.check([
+      () =>
+        this.prismaHealth.pingCheck('database', this.prismaService as never),
+      () => this.redisHealth.isHealthy('redis'),
+    ]);
+  }
+
   @Get('ping')
   @Public()
-  @ApiOperation({ summary: 'Simple liveness probe' })
+  @ApiOperation({ summary: 'Simple liveness probe (alias of /health/live)' })
   ping(): { status: string; timestamp: string } {
     return {
       status: 'ok',

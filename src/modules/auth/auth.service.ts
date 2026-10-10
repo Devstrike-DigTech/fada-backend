@@ -8,9 +8,14 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
+import { JwtService, JwtSignOptions } from '@nestjs/jwt';
+import * as bcrypt from 'bcryptjs';
+import { randomInt, randomUUID, timingSafeEqual } from 'crypto';
+import {
+  activeSecrets,
+  verifyWithRotation,
+} from '@common/security/jwt-rotation';
+import { HttpException, HttpStatus } from '@nestjs/common';
 import { PrismaService } from '@infra/database/prisma.service';
 import { RedisService } from '@infra/redis/redis.service';
 import { EventBusService } from '@infra/events/event-bus.service';
@@ -29,8 +34,14 @@ const GUEST_TOKEN_TTL_SECONDS = 24 * 60 * 60; // 24 hours
 const GUEST_DAILY_SEARCH_LIMIT = 3;
 
 // ─── Redis key helpers ────────────────────────────────────────────────────────
+/** Wrong codes allowed per issued OTP before it is destroyed */
+const MAX_OTP_ATTEMPTS = 5;
+
 const REDIS_KEYS = {
   otp: (email: string) => `auth:otp:${email}`,
+  passwordReset: (email: string) => `auth:pwd-reset:${email}`,
+  otpFailures: (purpose: string, email: string) =>
+    `auth:otp-fail:${purpose}:${email}`,
   refreshToken: (userId: string, tokenId: string) =>
     `auth:refresh:${userId}:${tokenId}`,
   guestToken: (token: string) => `auth:guest:${token}`,
@@ -73,7 +84,9 @@ export class AuthService {
 
   // ─── Register Customer ──────────────────────────────────────────────────────
 
-  async registerCustomer(dto: RegisterCustomerDto): Promise<{ message: string }> {
+  async registerCustomer(
+    dto: RegisterCustomerDto,
+  ): Promise<{ message: string }> {
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
@@ -86,7 +99,9 @@ export class AuthService {
       where: { phone: dto.phone },
     });
     if (phoneExists) {
-      throw new ConflictException('An account with this phone number already exists');
+      throw new ConflictException(
+        'An account with this phone number already exists',
+      );
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
@@ -118,15 +133,16 @@ export class AuthService {
     // Send email OTP for verification
     const otp = this.generateOtp();
     await this.redis.set(REDIS_KEYS.otp(user.email), otp, OTP_TTL_SECONDS);
+    await this.redis.del(REDIS_KEYS.otpFailures('verify', user.email));
 
-    await this.eventBus.emit(EVENTS.AUTH.USER_REGISTERED, {
+    this.eventBus.emit(EVENTS.AUTH.USER_REGISTERED, {
       userId: user.id,
       email: user.email,
       role: user.role,
       registeredAt: new Date(),
     });
 
-    await this.eventBus.emit(EVENTS.NOTIFICATION.EMAIL_SEND_REQUESTED, {
+    this.eventBus.emit(EVENTS.NOTIFICATION.EMAIL_SEND_REQUESTED, {
       to: user.email,
       subject: 'Verify your FADA account',
       templateId: 'email-verification',
@@ -139,12 +155,17 @@ export class AuthService {
     });
 
     this.logger.log(`Customer registered: ${user.id}`);
-    return { message: 'Registration successful. Check your email for an OTP to verify your account.' };
+    return {
+      message:
+        'Registration successful. Check your email for an OTP to verify your account.',
+    };
   }
 
   // ─── Register Pharmacist ────────────────────────────────────────────────────
 
-  async registerPharmacist(dto: RegisterPharmacistDto): Promise<{ message: string }> {
+  async registerPharmacist(
+    dto: RegisterPharmacistDto,
+  ): Promise<{ message: string }> {
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
@@ -156,7 +177,9 @@ export class AuthService {
       where: { phone: dto.phone },
     });
     if (phoneExists) {
-      throw new ConflictException('An account with this phone number already exists');
+      throw new ConflictException(
+        'An account with this phone number already exists',
+      );
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
@@ -188,7 +211,7 @@ export class AuthService {
     });
 
     // Trigger PCN verification via queue
-    await this.eventBus.emit(EVENTS.PHARMACY.PCN_VERIFICATION_REQUESTED, {
+    this.eventBus.emit(EVENTS.PHARMACY.PCN_VERIFICATION_REQUESTED, {
       pharmacistId: user.id,
       licenseNumber: dto.licenseNumber,
       licenseType: dto.licenseType,
@@ -197,15 +220,16 @@ export class AuthService {
     // Send email OTP for account verification
     const otp = this.generateOtp();
     await this.redis.set(REDIS_KEYS.otp(user.email), otp, OTP_TTL_SECONDS);
+    await this.redis.del(REDIS_KEYS.otpFailures('verify', user.email));
 
-    await this.eventBus.emit(EVENTS.AUTH.USER_REGISTERED, {
+    this.eventBus.emit(EVENTS.AUTH.USER_REGISTERED, {
       userId: user.id,
       email: user.email,
       role: user.role,
       registeredAt: new Date(),
     });
 
-    await this.eventBus.emit(EVENTS.NOTIFICATION.EMAIL_SEND_REQUESTED, {
+    this.eventBus.emit(EVENTS.NOTIFICATION.EMAIL_SEND_REQUESTED, {
       to: user.email,
       subject: 'Verify your FADA Pharmacist account',
       templateId: 'pharmacist-email-verification',
@@ -230,11 +254,17 @@ export class AuthService {
     const storedOtp = await this.redis.get(REDIS_KEYS.otp(email.toLowerCase()));
 
     if (!storedOtp) {
-      throw new BadRequestException('OTP has expired. Please request a new one.');
+      throw new BadRequestException(
+        'OTP has expired. Please request a new one.',
+      );
     }
-    if (storedOtp !== otp) {
-      throw new BadRequestException('Invalid OTP');
-    }
+    await this.assertOtp(
+      storedOtp,
+      otp,
+      REDIS_KEYS.otp(email.toLowerCase()),
+      REDIS_KEYS.otpFailures('verify', email.toLowerCase()),
+      'Invalid OTP',
+    );
 
     const user = await this.prisma.user.update({
       where: { email: email.toLowerCase() },
@@ -246,8 +276,9 @@ export class AuthService {
     });
 
     await this.redis.del(REDIS_KEYS.otp(email.toLowerCase()));
+    await this.redis.del(REDIS_KEYS.otpFailures('verify', email.toLowerCase()));
 
-    await this.eventBus.emit(EVENTS.AUTH.USER_VERIFIED, {
+    this.eventBus.emit(EVENTS.AUTH.USER_VERIFIED, {
       userId: user.id,
       email: user.email,
       verifiedAt: new Date(),
@@ -256,7 +287,7 @@ export class AuthService {
     const tokens = await this.generateTokenPair(user.id, user.email, user.role);
     const profile = user.customerProfile ?? user.pharmacistProfile;
 
-    await this.eventBus.emit(EVENTS.NOTIFICATION.EMAIL_SEND_REQUESTED, {
+    this.eventBus.emit(EVENTS.NOTIFICATION.EMAIL_SEND_REQUESTED, {
       to: user.email,
       subject: 'Welcome to FADA!',
       templateId: 'welcome',
@@ -303,9 +334,10 @@ export class AuthService {
 
     const otp = this.generateOtp();
     await this.redis.set(REDIS_KEYS.otp(user.email), otp, OTP_TTL_SECONDS);
+    await this.redis.del(REDIS_KEYS.otpFailures('verify', user.email));
 
     const profile = user.customerProfile ?? user.pharmacistProfile;
-    await this.eventBus.emit(EVENTS.NOTIFICATION.EMAIL_SEND_REQUESTED, {
+    this.eventBus.emit(EVENTS.NOTIFICATION.EMAIL_SEND_REQUESTED, {
       to: user.email,
       subject: 'Your FADA verification code',
       templateId: 'email-verification',
@@ -350,7 +382,7 @@ export class AuthService {
       throw new ForbiddenException('Your account has been deactivated');
     }
 
-    await this.eventBus.emit(EVENTS.AUTH.USER_LOGGED_IN, {
+    this.eventBus.emit(EVENTS.AUTH.USER_LOGGED_IN, {
       userId: user.id,
       loggedInAt: new Date(),
     });
@@ -379,9 +411,14 @@ export class AuthService {
     let payload: { sub: string; email: string; role: string; jti: string };
 
     try {
-      payload = this.jwtService.verify<typeof payload>(refreshToken, {
-        secret: this.configService.get<string>('jwt.refreshSecret'),
-      });
+      payload = verifyWithRotation<typeof payload>(
+        this.jwtService,
+        refreshToken,
+        activeSecrets(
+          this.configService.get<string>('jwt.refreshSecret'),
+          this.configService.get<string>('jwt.refreshSecretPrevious'),
+        ),
+      );
     } catch {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
@@ -405,7 +442,7 @@ export class AuthService {
       payload.role,
     );
 
-    await this.eventBus.emit(EVENTS.AUTH.REFRESH_TOKEN_ROTATED, {
+    this.eventBus.emit(EVENTS.AUTH.REFRESH_TOKEN_ROTATED, {
       userId: payload.sub,
       email: payload.email,
       role: payload.role,
@@ -449,12 +486,13 @@ export class AuthService {
 
     const otp = this.generateOtp();
     await this.redis.set(
-      `auth:pwd-reset:${email.toLowerCase()}`,
+      REDIS_KEYS.passwordReset(email.toLowerCase()),
       otp,
       OTP_TTL_SECONDS,
     );
+    await this.redis.del(REDIS_KEYS.otpFailures('reset', email.toLowerCase()));
 
-    await this.eventBus.emit(EVENTS.AUTH.PASSWORD_RESET_REQUESTED, {
+    this.eventBus.emit(EVENTS.AUTH.PASSWORD_RESET_REQUESTED, {
       userId: user.id,
       email: user.email,
       otpCode: otp,
@@ -462,7 +500,7 @@ export class AuthService {
     });
 
     const profile = user.customerProfile ?? user.pharmacistProfile;
-    await this.eventBus.emit(EVENTS.NOTIFICATION.EMAIL_SEND_REQUESTED, {
+    this.eventBus.emit(EVENTS.NOTIFICATION.EMAIL_SEND_REQUESTED, {
       to: user.email,
       subject: 'Reset your FADA password',
       templateId: 'password-reset',
@@ -486,12 +524,20 @@ export class AuthService {
     otp: string,
     newPassword: string,
   ): Promise<{ message: string }> {
-    const key = `auth:pwd-reset:${email.toLowerCase()}`;
+    const key = REDIS_KEYS.passwordReset(email.toLowerCase());
+    const failKey = REDIS_KEYS.otpFailures('reset', email.toLowerCase());
     const storedOtp = await this.redis.get(key);
 
-    if (!storedOtp || storedOtp !== otp) {
+    if (!storedOtp) {
       throw new BadRequestException('Invalid or expired reset code');
     }
+    await this.assertOtp(
+      storedOtp,
+      otp,
+      key,
+      failKey,
+      'Invalid or expired reset code',
+    );
 
     const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
 
@@ -501,8 +547,11 @@ export class AuthService {
     });
 
     await this.redis.del(key);
+    await this.redis.del(failKey);
+    // A reset means the old password may be compromised: end every session
+    await this.revokeAllRefreshTokens(user.id);
 
-    await this.eventBus.emit(EVENTS.AUTH.PASSWORD_RESET_COMPLETED, {
+    this.eventBus.emit(EVENTS.AUTH.PASSWORD_RESET_COMPLETED, {
       userId: user.id,
       email: user.email,
       role: user.role,
@@ -535,8 +584,12 @@ export class AuthService {
       where: { id: userId },
       data: { passwordHash: hashedPassword },
     });
+    await this.revokeAllRefreshTokens(userId);
 
-    return { message: 'Password changed successfully' };
+    return {
+      message:
+        'Password changed successfully. Please sign in again on your other devices.',
+    };
   }
 
   // ─── Google OAuth Handler ───────────────────────────────────────────────────
@@ -586,7 +639,7 @@ export class AuthService {
         });
       });
 
-      await this.eventBus.emit(EVENTS.AUTH.USER_REGISTERED, {
+      this.eventBus.emit(EVENTS.AUTH.USER_REGISTERED, {
         userId: user.id,
         email: user.email,
         role: user.role,
@@ -604,7 +657,7 @@ export class AuthService {
       throw new ForbiddenException('Your account has been deactivated');
     }
 
-    await this.eventBus.emit(EVENTS.AUTH.USER_LOGGED_IN, {
+    this.eventBus.emit(EVENTS.AUTH.USER_LOGGED_IN, {
       userId: user.id,
       loggedInAt: new Date(),
     });
@@ -653,7 +706,9 @@ export class AuthService {
       user = await this.prisma.$transaction(async (tx) => {
         const newUser = await tx.user.create({
           data: {
-            email: appleUser.email?.toLowerCase() ?? `${appleUser.appleId}@apple.fada`,
+            email:
+              appleUser.email?.toLowerCase() ??
+              `${appleUser.appleId}@apple.fada`,
             appleId: appleUser.appleId,
             role: 'customer',
             fadaId,
@@ -677,7 +732,7 @@ export class AuthService {
         });
       });
 
-      await this.eventBus.emit(EVENTS.AUTH.USER_REGISTERED, {
+      this.eventBus.emit(EVENTS.AUTH.USER_REGISTERED, {
         userId: user.id,
         email: user.email,
         role: user.role,
@@ -719,16 +774,12 @@ export class AuthService {
     remainingSearches: number;
     expiresInSeconds: number;
   }> {
-    const token = `guest_${uuidv4().replace(/-/g, '')}`;
+    const token = `guest_${randomUUID().replace(/-/g, '')}`;
     const key = REDIS_KEYS.guestToken(token);
     const searchCountKey = REDIS_KEYS.guestSearchCount(token);
 
     await this.redis.set(key, '1', GUEST_TOKEN_TTL_SECONDS);
-    await this.redis.set(
-      searchCountKey,
-      '0',
-      GUEST_TOKEN_TTL_SECONDS,
-    );
+    await this.redis.set(searchCountKey, '0', GUEST_TOKEN_TTL_SECONDS);
 
     return {
       guestToken: token,
@@ -765,7 +816,7 @@ export class AuthService {
     const remaining = Math.max(0, GUEST_DAILY_SEARCH_LIMIT - count);
 
     if (count > GUEST_DAILY_SEARCH_LIMIT) {
-      await this.eventBus.emit(EVENTS.SEARCH.GUEST_LIMIT_REACHED, {
+      this.eventBus.emit(EVENTS.SEARCH.GUEST_LIMIT_REACHED, {
         guestToken: token,
         query: '',
         radiusKm: 0,
@@ -785,7 +836,7 @@ export class AuthService {
     email: string,
     role: string,
   ): Promise<AuthTokens> {
-    const jti = uuidv4();
+    const jti = randomUUID();
     const accessExpiresIn =
       this.configService.get<string>('jwt.accessExpiresIn') ?? '15m';
     const refreshExpiresIn =
@@ -795,8 +846,8 @@ export class AuthService {
       { sub: userId, email, role },
       {
         secret: this.configService.get<string>('jwt.accessSecret'),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expiresIn: accessExpiresIn as any,
+
+        expiresIn: accessExpiresIn as JwtSignOptions['expiresIn'],
       },
     );
 
@@ -804,8 +855,8 @@ export class AuthService {
       { sub: userId, email, role, jti },
       {
         secret: this.configService.get<string>('jwt.refreshSecret'),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expiresIn: refreshExpiresIn as any,
+
+        expiresIn: refreshExpiresIn as JwtSignOptions['expiresIn'],
       },
     );
 
@@ -829,9 +880,11 @@ export class AuthService {
     password: string,
     secret: string,
   ): Promise<AuthResponse> {
-    const expectedSecret = this.configService.get<string>('app.adminBootstrapSecret');
+    const expectedSecret = this.configService.get<string>(
+      'app.adminBootstrapSecret',
+    );
 
-    if (!expectedSecret || secret !== expectedSecret) {
+    if (!expectedSecret || !this.safeEqual(secret ?? '', expectedSecret)) {
       throw new UnauthorizedException('Invalid bootstrap secret');
     }
 
@@ -916,8 +969,59 @@ export class AuthService {
 
   // ─── Private Helpers ────────────────────────────────────────────────────────
 
+  /** 6-digit code from a CSPRNG */
   private generateOtp(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return randomInt(100000, 1000000).toString();
+  }
+
+  private safeEqual(a: string, b: string): boolean {
+    const ba = Buffer.from(a);
+    const bb = Buffer.from(b);
+    return ba.length === bb.length && timingSafeEqual(ba, bb);
+  }
+
+  /**
+   * Compares a submitted OTP in constant time and counts failures. After
+   * MAX_OTP_ATTEMPTS wrong codes the OTP is destroyed, so a 6-digit code
+   * cannot be brute-forced within its lifetime.
+   */
+  private async assertOtp(
+    stored: string,
+    supplied: string,
+    otpKey: string,
+    failKey: string,
+    message: string,
+  ): Promise<void> {
+    if (this.safeEqual(String(supplied ?? ''), stored)) return;
+
+    const failures = await this.redis.incr(failKey);
+    if (failures === 1) await this.redis.expire(failKey, OTP_TTL_SECONDS);
+    if (failures >= MAX_OTP_ATTEMPTS) {
+      await this.redis.del(otpKey);
+      await this.redis.del(failKey);
+      throw new HttpException(
+        'Too many incorrect codes. Please request a new one.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    throw new BadRequestException(message);
+  }
+
+  /** Deletes every stored refresh token for the user (all devices). */
+  private async revokeAllRefreshTokens(userId: string): Promise<void> {
+    const client = this.redis.getClient();
+    let cursor = '0';
+    do {
+      const [next, keys] = await client.scan(
+        cursor,
+        'MATCH',
+        `auth:refresh:${userId}:*`,
+        'COUNT',
+        200,
+      );
+      if (keys.length) await client.del(...keys);
+      cursor = next;
+    } while (cursor !== '0');
   }
 
   private generateFadaId(type: 'customer' | 'pharmacist' | 'admin'): string {
@@ -930,7 +1034,10 @@ export class AuthService {
   }
 
   private generateReferralCode(firstName: string): string {
-    const upper = firstName.replace(/[^a-zA-Z]/g, '').substring(0, 4).toUpperCase();
+    const upper = firstName
+      .replace(/[^a-zA-Z]/g, '')
+      .substring(0, 4)
+      .toUpperCase();
     const rand = Math.floor(1000 + Math.random() * 9000);
     return `${upper}${rand}`;
   }

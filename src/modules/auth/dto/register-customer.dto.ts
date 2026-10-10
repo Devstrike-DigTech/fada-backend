@@ -27,7 +27,10 @@ export class RegisterCustomerDto {
   @IsNotEmpty()
   email: string;
 
-  @ApiProperty({ example: '+2348012345678', description: 'Nigerian phone number' })
+  @ApiProperty({
+    example: '+2348012345678',
+    description: 'Nigerian phone number',
+  })
   @IsString()
   @IsNotEmpty()
   @Matches(/^\+?[0-9]{10,15}$/, {

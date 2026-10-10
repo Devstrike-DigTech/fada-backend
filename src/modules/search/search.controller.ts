@@ -1,10 +1,5 @@
 import { Controller, Get, Headers, Query } from '@nestjs/common';
-import {
-  ApiHeader,
-  ApiOperation,
-  ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiHeader, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { AllowGuest } from '@common/decorators/allow-guest.decorator';
 import {
   CurrentUser,
@@ -49,11 +44,22 @@ export class SearchController {
     required: false,
     description: 'Stable UUID for the guest session (client-generated)',
   })
-  @ApiQuery({ name: 'q', description: 'Drug name, generic name, alias or NAFDAC number' })
+  @ApiQuery({
+    name: 'q',
+    description: 'Drug name, generic name, alias or NAFDAC number',
+  })
   @ApiQuery({ name: 'latitude', required: false })
   @ApiQuery({ name: 'longitude', required: false })
-  @ApiQuery({ name: 'radiusKm', required: false, description: 'Default 5 km, max 100 km' })
-  @ApiQuery({ name: 'prescriptionType', required: false, enum: ['otc', 'prescription_only', 'controlled'] })
+  @ApiQuery({
+    name: 'radiusKm',
+    required: false,
+    description: 'Default 5 km, max 100 km',
+  })
+  @ApiQuery({
+    name: 'prescriptionType',
+    required: false,
+    enum: ['otc', 'prescription_only', 'controlled'],
+  })
   @ApiQuery({ name: 'categoryId', required: false })
   searchDrugs(
     @CurrentUser() user: CurrentUserData | undefined,
@@ -86,7 +92,11 @@ export class SearchController {
   @ApiQuery({ name: 'q', required: false, description: 'Pharmacy name' })
   @ApiQuery({ name: 'latitude', required: false })
   @ApiQuery({ name: 'longitude', required: false })
-  @ApiQuery({ name: 'radiusKm', required: false, description: 'Default 5 km, max 100 km' })
+  @ApiQuery({
+    name: 'radiusKm',
+    required: false,
+    description: 'Default 5 km, max 100 km',
+  })
   @ApiQuery({ name: 'state', required: false })
   @ApiQuery({ name: 'city', required: false })
   searchPharmacies(
@@ -121,10 +131,17 @@ export class SearchController {
     required: false,
     description: 'Stable UUID for the guest session (client-generated)',
   })
-  @ApiQuery({ name: 'q', description: 'Ailment or symptom (e.g. "fever", "headache", "malaria")' })
+  @ApiQuery({
+    name: 'q',
+    description: 'Ailment or symptom (e.g. "fever", "headache", "malaria")',
+  })
   @ApiQuery({ name: 'latitude', required: false })
   @ApiQuery({ name: 'longitude', required: false })
-  @ApiQuery({ name: 'radiusKm', required: false, description: 'Default 5 km, max 100 km' })
+  @ApiQuery({
+    name: 'radiusKm',
+    required: false,
+    description: 'Default 5 km, max 100 km',
+  })
   searchAilments(
     @CurrentUser() user: CurrentUserData | undefined,
     @Headers('x-guest-token') guestToken: string | undefined,

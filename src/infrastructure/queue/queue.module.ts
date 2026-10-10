@@ -26,6 +26,8 @@ import { QUEUE_NAMES } from './queue.constants';
       { name: QUEUE_NAMES.NOTIFICATIONS },
       { name: QUEUE_NAMES.INVENTORY_BATCH_UPLOAD },
       { name: QUEUE_NAMES.RESERVATION_EXPIRY },
+      { name: QUEUE_NAMES.SUBSCRIPTION_BILLING },
+      { name: QUEUE_NAMES.ADS_LIFECYCLE },
       { name: QUEUE_NAMES.NAFDAC_CACHE_REFRESH },
       { name: QUEUE_NAMES.ANALYTICS_SNAPSHOT },
       { name: QUEUE_NAMES.VERIFICATION_PCN },

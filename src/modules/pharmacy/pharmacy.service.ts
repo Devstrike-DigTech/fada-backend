@@ -9,10 +9,14 @@ import {
 import { PrismaService } from '@infra/database/prisma.service';
 import { EventBusService } from '@infra/events/event-bus.service';
 import { CloudinaryService } from '@infra/storage/cloudinary.service';
-import { EVENTS } from '@common/types/events.types';
+import {
+  EVENTS,
+  PharmacyProfileCompletedPayload,
+} from '@common/types/events.types';
 import { randomBytes } from 'crypto';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { AuthService } from '@modules/auth/auth.service';
+import { SubscriptionEntitlementsService } from '@modules/subscription/subscription-entitlements.service';
 import { CreatePharmacyDto } from './dto/create-pharmacy.dto';
 import { UpdatePharmacyDto } from './dto/update-pharmacy.dto';
 import { CreateBranchDto } from './dto/create-branch.dto';
@@ -32,14 +36,12 @@ export class PharmacyService {
     private readonly eventBus: EventBusService,
     private readonly cloudinary: CloudinaryService,
     private readonly authService: AuthService,
+    private readonly entitlements: SubscriptionEntitlementsService,
   ) {}
 
   // ─── Create Pharmacy ────────────────────────────────────────────────────────
 
-  async createPharmacy(
-    pharmacistUserId: string,
-    dto: CreatePharmacyDto,
-  ) {
+  async createPharmacy(pharmacistUserId: string, dto: CreatePharmacyDto) {
     // A pharmacist may only own one pharmacy
     const existingProfile = await this.prisma.pharmacistProfile.findUnique({
       where: { userId: pharmacistUserId },
@@ -103,7 +105,7 @@ export class PharmacyService {
       return newPharmacy;
     });
 
-    await this.eventBus.emit(EVENTS.PHARMACY.REGISTERED, {
+    this.eventBus.emit(EVENTS.PHARMACY.REGISTERED, {
       pharmacyId: pharmacy.id,
       pharmacistId: pharmacistUserId,
       pharmacyName: pharmacy.name,
@@ -112,7 +114,7 @@ export class PharmacyService {
 
     // Trigger CAC verification if a number was provided
     if (dto.cacNumber) {
-      await this.eventBus.emit(EVENTS.PHARMACY.CAC_VERIFICATION_REQUESTED, {
+      this.eventBus.emit(EVENTS.PHARMACY.CAC_VERIFICATION_REQUESTED, {
         pharmacyId: pharmacy.id,
         cacNumber: dto.cacNumber,
         businessName: dto.name,
@@ -180,8 +182,7 @@ export class PharmacyService {
 
     // If CAC number changed, trigger re-verification
     const cacChanged =
-      dto.cacNumber &&
-      dto.cacNumber !== existingPharmacy.cacNumber;
+      dto.cacNumber && dto.cacNumber !== existingPharmacy.cacNumber;
 
     const updated = await this.prisma.pharmacy.update({
       where: { id: pharmacyId },
@@ -206,13 +207,14 @@ export class PharmacyService {
     });
 
     if (cacChanged && dto.cacNumber) {
-      await this.eventBus.emit(EVENTS.PHARMACY.CAC_VERIFICATION_REQUESTED, {
+      this.eventBus.emit(EVENTS.PHARMACY.CAC_VERIFICATION_REQUESTED, {
         pharmacyId,
         cacNumber: dto.cacNumber,
         businessName: updated.name,
       });
     }
 
+    await this.checkProfileCompletion(pharmacyId);
     return this.getPharmacyWithDetails(pharmacyId);
   }
 
@@ -224,6 +226,7 @@ export class PharmacyService {
     dto: CreateBranchDto,
   ) {
     await this.assertOwnerOrOperator(pharmacistUserId, pharmacyId);
+    await this.entitlements.assertCanAddBranch(pharmacyId);
 
     // If setting as head branch, un-flag existing
     if (dto.isHeadBranch) {
@@ -245,7 +248,7 @@ export class PharmacyService {
       },
     });
 
-    await this.eventBus.emit(EVENTS.PHARMACY.BRANCH_ADDED, {
+    this.eventBus.emit(EVENTS.PHARMACY.BRANCH_ADDED, {
       pharmacyId,
       pharmacistId: pharmacistUserId,
       pharmacyName: branch.name,
@@ -280,12 +283,14 @@ export class PharmacyService {
         ...(dto.landmark !== undefined && { landmark: dto.landmark }),
         ...(dto.latitude !== undefined && { latitude: dto.latitude }),
         ...(dto.longitude !== undefined && { longitude: dto.longitude }),
-        ...(dto.isHeadBranch !== undefined && { isHeadBranch: dto.isHeadBranch }),
+        ...(dto.isHeadBranch !== undefined && {
+          isHeadBranch: dto.isHeadBranch,
+        }),
       },
       include: { workingHours: { orderBy: { dayOfWeek: 'asc' } } },
     });
 
-    await this.eventBus.emit(EVENTS.PHARMACY.BRANCH_UPDATED, {
+    this.eventBus.emit(EVENTS.PHARMACY.BRANCH_UPDATED, {
       pharmacyId,
       pharmacistId: pharmacistUserId,
       pharmacyName: updated.name,
@@ -304,13 +309,19 @@ export class PharmacyService {
     await this.assertBranchBelongsToPharmacy(branchId, pharmacyId);
 
     // Cannot delete the last branch
-    const branchCount = await this.prisma.branch.count({ where: { pharmacyId } });
+    const branchCount = await this.prisma.branch.count({
+      where: { pharmacyId },
+    });
     if (branchCount <= 1) {
-      throw new BadRequestException('Cannot delete the only branch of a pharmacy');
+      throw new BadRequestException(
+        'Cannot delete the only branch of a pharmacy',
+      );
     }
 
     // Cannot delete head branch directly — must promote another first
-    const branch = await this.prisma.branch.findUnique({ where: { id: branchId } });
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+    });
     if (branch?.isHeadBranch) {
       throw new BadRequestException(
         'Cannot delete the head branch. Assign another branch as head first.',
@@ -370,6 +381,7 @@ export class PharmacyService {
       ),
     );
 
+    await this.checkProfileCompletion(pharmacyId);
     return this.prisma.pharmacyWorkingHours.findMany({
       where: { branchId },
       orderBy: { dayOfWeek: 'asc' },
@@ -390,7 +402,9 @@ export class PharmacyService {
       where: { pharmacyId },
     });
     if (imageCount >= 10) {
-      throw new BadRequestException('Maximum of 10 images per pharmacy allowed');
+      throw new BadRequestException(
+        'Maximum of 10 images per pharmacy allowed',
+      );
     }
 
     const result = await this.cloudinary.uploadImage(
@@ -415,6 +429,7 @@ export class PharmacyService {
       },
     });
 
+    await this.checkProfileCompletion(pharmacyId);
     return image;
   }
 
@@ -555,7 +570,9 @@ export class PharmacyService {
       throw new BadRequestException('This invite has already been accepted');
     }
     if (invite.expiresAt < new Date()) {
-      throw new BadRequestException('This invite has expired. Ask the pharmacy owner to send a new one.');
+      throw new BadRequestException(
+        'This invite has expired. Ask the pharmacy owner to send a new one.',
+      );
     }
 
     // Resolve or create the staff user account
@@ -566,10 +583,17 @@ export class PharmacyService {
     if (staffUser) {
       // Account exists — check they're not already a member
       const existing = await this.prisma.pharmacyStaff.findUnique({
-        where: { userId_pharmacyId: { userId: staffUser.id, pharmacyId: invite.pharmacyId } },
+        where: {
+          userId_pharmacyId: {
+            userId: staffUser.id,
+            pharmacyId: invite.pharmacyId,
+          },
+        },
       });
       if (existing) {
-        throw new ConflictException('This user is already a staff member at this pharmacy');
+        throw new ConflictException(
+          'This user is already a staff member at this pharmacy',
+        );
       }
     } else {
       // No account — create one from the invite details
@@ -589,7 +613,9 @@ export class PharmacyService {
         },
       });
 
-      this.logger.log(`Created staff account ${staffUser.id} for invite ${invite.id}`);
+      this.logger.log(
+        `Created staff account ${staffUser.id} for invite ${invite.id}`,
+      );
     }
 
     // Create staff membership and mark invite accepted in one transaction
@@ -641,7 +667,17 @@ export class PharmacyService {
     const members = await this.prisma.pharmacyStaff.findMany({
       where: { pharmacyId, isActive: true },
       include: {
-        user: { select: { id: true, email: true, fadaId: true, firstName: true, lastName: true, avatarUrl: true, isActive: true } },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            fadaId: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+            isActive: true,
+          },
+        },
         branch: { select: { id: true, name: true } },
       },
       orderBy: { joinedAt: 'asc' },
@@ -708,7 +744,11 @@ export class PharmacyService {
     });
   }
 
-  async revokeInvite(requesterUserId: string, pharmacyId: string, inviteId: string) {
+  async revokeInvite(
+    requesterUserId: string,
+    pharmacyId: string,
+    inviteId: string,
+  ) {
     await this.assertOwnership(requesterUserId, pharmacyId);
 
     const invite = await this.prisma.pharmacyStaffInvite.findFirst({
@@ -782,6 +822,52 @@ export class PharmacyService {
 
   // ─── Private Helpers ────────────────────────────────────────────────────────
 
+  /**
+   * Emits `pharmacy.profile.completed` once the public profile has everything a
+   * customer needs: contact, location, a photo and working hours. Idempotent
+   * downstream (points are keyed on pharmacyId).
+   */
+  private async checkProfileCompletion(pharmacyId: string): Promise<void> {
+    try {
+      const p = await this.prisma.pharmacy.findUnique({
+        where: { id: pharmacyId },
+        select: {
+          phone: true,
+          email: true,
+          address: true,
+          latitude: true,
+          longitude: true,
+          description: true,
+          images: { select: { id: true }, take: 1 },
+          branches: {
+            where: { isActive: true },
+            select: { workingHours: { select: { id: true }, take: 1 } },
+          },
+        },
+      });
+      if (!p) return;
+      const complete =
+        !!p.phone &&
+        !!p.email &&
+        !!p.address &&
+        p.latitude !== null &&
+        p.longitude !== null &&
+        !!p.description &&
+        p.images.length > 0 &&
+        p.branches.some((b) => b.workingHours.length > 0);
+      if (!complete) return;
+      const payload: PharmacyProfileCompletedPayload = {
+        pharmacyId,
+        completedAt: new Date(),
+      };
+      this.eventBus.emit(EVENTS.PHARMACY.PROFILE_COMPLETED, payload);
+    } catch (err) {
+      this.logger.warn(
+        `Profile completion check failed for ${pharmacyId}: ${(err as Error).message}`,
+      );
+    }
+  }
+
   private async getPharmacyWithDetails(pharmacyId: string) {
     return this.prisma.pharmacy.findUniqueOrThrow({
       where: { id: pharmacyId },
@@ -806,7 +892,9 @@ export class PharmacyService {
       where: { userId: pharmacistUserId, pharmacyId, roleInPharmacy: 'owner' },
     });
     if (!profile) {
-      throw new ForbiddenException('Only the pharmacy owner can perform this action');
+      throw new ForbiddenException(
+        'Only the pharmacy owner can perform this action',
+      );
     }
   }
 

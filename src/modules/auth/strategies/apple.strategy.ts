@@ -1,7 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, AuthenticateOptions } from 'passport-apple';
+import {
+  OAUTH_UNCONFIGURED,
+  isOAuthConfigured,
+} from '../guards/oauth-configured.guard';
 
 export interface AppleOAuthUser {
   appleId: string;
@@ -28,20 +32,28 @@ type AppleDoneCallback = (
 @Injectable()
 export class AppleStrategy extends PassportStrategy(Strategy, 'apple') {
   constructor(configService: ConfigService) {
+    // Missing credentials must not stop the API from booting: the strategy is
+    // built with placeholders and OAuthConfiguredGuard answers 503 instead.
+    const get = (key: string): string =>
+      configService.get<string>(`auth.apple.${key}`) || OAUTH_UNCONFIGURED;
     const opts: ConstructorParameters<typeof Strategy>[0] = {
-      clientID: configService.get<string>('auth.apple.clientId') ?? '',
-      teamID: configService.get<string>('auth.apple.teamId') ?? '',
-      keyID: configService.get<string>('auth.apple.keyId') ?? '',
-      privateKeyString:
-        configService.get<string>('auth.apple.privateKey') ?? '',
+      clientID: get('clientId'),
+      teamID: get('teamId'),
+      keyID: get('keyId'),
+      privateKeyString: get('privateKey'),
       callbackURL:
-        configService.get<string>('app.appleCallbackUrl') ??
+        configService.get<string>('auth.apple.callbackUrl') ||
         'http://localhost:3000/api/v1/auth/apple/callback',
       scope: ['name', 'email'],
       passReqToCallback: false,
-    } as AuthenticateOptions & ConstructorParameters<typeof Strategy>[0];
+    } as AuthenticateOptions;
 
     super(opts);
+    if (!isOAuthConfigured(configService, 'apple')) {
+      new Logger(AppleStrategy.name).warn(
+        'APPLE_* credentials not set — Apple Sign-In is disabled.',
+      );
+    }
   }
 
   validate(

@@ -32,4 +32,20 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
+  {
+    // Tests read untyped HTTP / socket payloads (`res.body` is any); production
+    // code keeps the strict unsafe-any rules.
+    files: ['test/**/*.ts', 'src/**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/restrict-template-expressions': 'off',
+    },
+  },
+  {
+    ignores: ['dist/**', 'dist-seed/**', 'coverage/**', 'scripts/**/*.js', 'jest.*.js', 'test/jest-e2e.config.js'],
+  },
 );

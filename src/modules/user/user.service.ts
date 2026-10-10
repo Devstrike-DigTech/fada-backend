@@ -9,7 +9,10 @@ export class UserService {
     private readonly cloudinary: CloudinaryService,
   ) {}
 
-  async uploadAvatar(userId: string, file: Express.Multer.File): Promise<{ avatarUrl: string }> {
+  async uploadAvatar(
+    userId: string,
+    file: Express.Multer.File,
+  ): Promise<{ avatarUrl: string }> {
     if (!file) {
       throw new BadRequestException('No image file provided');
     }

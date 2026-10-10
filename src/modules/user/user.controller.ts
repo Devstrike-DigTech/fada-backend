@@ -15,7 +15,10 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { CurrentUser, CurrentUserData } from '@common/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserData,
+} from '@common/decorators/current-user.decorator';
 import { UserService } from './user.service';
 
 @ApiTags('User')

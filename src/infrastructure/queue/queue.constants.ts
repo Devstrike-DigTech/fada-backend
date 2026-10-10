@@ -2,6 +2,8 @@ export const QUEUE_NAMES = {
   NOTIFICATIONS: 'notifications',
   INVENTORY_BATCH_UPLOAD: 'inventory.batch-upload',
   RESERVATION_EXPIRY: 'reservation.expiry',
+  SUBSCRIPTION_BILLING: 'subscription.billing',
+  ADS_LIFECYCLE: 'ads.lifecycle',
   NAFDAC_CACHE_REFRESH: 'nafdac.cache-refresh',
   ANALYTICS_SNAPSHOT: 'analytics.snapshot',
   VERIFICATION_PCN: 'verification.pcn',

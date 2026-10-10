@@ -126,21 +126,21 @@ fada-backend/
 
 | Phase | Name | Status |
 |---|---|---|
-| **Phase 1** | Foundation & Infrastructure Setup | 🔲 Not Started |
-| **Phase 2** | Auth Module | 🔲 Not Started |
-| **Phase 3** | Pharmacy & Branch Module | 🔲 Not Started |
-| **Phase 4** | Inventory Module | 🔲 Not Started |
-| **Phase 5** | Search & Discovery Module | 🔲 Not Started |
-| **Phase 6** | Reservation Module | 🔲 Not Started |
-| **Phase 7** | Subscription & Payments Module | 🔲 Not Started |
-| **Phase 8** | Ads & Promotions Module | 🔲 Not Started |
-| **Phase 9** | Customer Features Module | 🔲 Not Started |
-| **Phase 10** | Points & Reputation Module | 🔲 Not Started |
-| **Phase 11** | Notifications Module | 🔲 Not Started |
-| **Phase 12** | Support & Content Module | 🔲 Not Started |
-| **Phase 13** | Analytics Module | 🔲 Not Started |
-| **Phase 14** | Real-Time & WebSockets | 🔲 Not Started |
-| **Phase 15** | Testing, Security & Deployment | 🔲 Not Started |
+| **Phase 1** | Foundation & Infrastructure Setup | ✅ Complete |
+| **Phase 2** | Auth Module | ✅ Complete |
+| **Phase 3** | Pharmacy & Branch Module | ✅ Complete |
+| **Phase 4** | Inventory Module | ✅ Complete |
+| **Phase 5** | Search & Discovery Module | ✅ Complete |
+| **Phase 6** | Reservation Module | ✅ Complete |
+| **Phase 7** | Subscription & Payments Module | ✅ Complete |
+| **Phase 8** | Ads & Promotions Module | ✅ Complete (+ back-office) |
+| **Phase 9** | Customer Features Module | ✅ Complete |
+| **Phase 10** | Points & Reputation Module | ✅ Complete |
+| **Phase 11** | Notifications Module | ✅ Complete |
+| **Phase 12** | Support & Content Module | ✅ Complete |
+| **Phase 13** | Analytics Module | ✅ Complete |
+| **Phase 14** | Real-Time & WebSockets | ✅ Complete |
+| **Phase 15** | Testing, Security & Deployment | ✅ Complete |
 
 > See `docs/PHASES.md` for full breakdown of each phase.
 
@@ -164,6 +164,16 @@ npx prisma migrate dev
 # Start development server
 npm run start:dev
 ```
+
+### Tests and checks
+
+```bash
+npm run lint:check && npm run typecheck   # what CI runs first
+npm test                                  # unit tests
+npm run test:e2e:docker                   # e2e against throwaway Postgres + Redis containers
+```
+
+See [docs/TESTING.md](docs/TESTING.md), [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) and [docs/SECURITY.md](docs/SECURITY.md).
 
 ---
 

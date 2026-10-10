@@ -1,0 +1,73 @@
+# Production-like stack on one host (VPS / staging box).
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+# Railway users: see railway.json instead.
+name: fada
+
+services:
+  postgres:
+    image: postgis/postgis:15-3.3
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fada}
+      POSTGRES_USER: ${POSTGRES_USER:-fada}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-fada} -d ${POSTGRES_DB:-fada}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # not published to the host: only the app talks to it
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes', '--requirepass', '${REDIS_PASSWORD:?set REDIS_PASSWORD}']
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" ping | grep PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+  # One-shot: apply migrations and seed reference data, then exit
+  migrate:
+    build: .
+    command: ['sh', '-c', 'npx prisma migrate deploy && node dist-seed/prisma/seed.js']
+    env_file: .env.production
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fada}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fada}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fada}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fada}?schema=public
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    ports:
+      - '${API_PORT:-3000}:3000'
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+
+volumes:
+  pgdata:
+  redisdata:

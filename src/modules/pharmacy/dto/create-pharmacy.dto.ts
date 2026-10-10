@@ -14,13 +14,18 @@ import {
 import { Type } from 'class-transformer';
 
 export class CreatePharmacyDto {
-  @ApiProperty({ example: 'RxPlus Pharmacy', description: 'Official pharmacy name' })
+  @ApiProperty({
+    example: 'RxPlus Pharmacy',
+    description: 'Official pharmacy name',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(120)
   name: string;
 
-  @ApiPropertyOptional({ example: 'A pharmacy committed to quality care in Lagos' })
+  @ApiPropertyOptional({
+    example: 'A pharmacy committed to quality care in Lagos',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(1000)
@@ -77,7 +82,10 @@ export class CreatePharmacyDto {
   @IsLatitude()
   latitude?: number;
 
-  @ApiPropertyOptional({ example: 3.3792, description: 'Head office longitude' })
+  @ApiPropertyOptional({
+    example: 3.3792,
+    description: 'Head office longitude',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsLongitude()

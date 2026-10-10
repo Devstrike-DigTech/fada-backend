@@ -1,0 +1,43 @@
+# Deploys to Railway after CI passes:
+#   dev → staging     main → production (protect the "production" environment in GitHub
+#   settings to require a reviewer before this job runs).
+# Secrets (per GitHub environment): RAILWAY_TOKEN (a Railway project token scoped to that
+# Railway environment). Variables: RAILWAY_SERVICE (service name, e.g. "fada-backend").
+# Railway itself runs `prisma migrate deploy` + seed as the preDeployCommand (railway.json).
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches: [dev, main]
+
+concurrency:
+  group: backend-deploy-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ github.event.workflow_run.head_branch == 'main' && 'production' || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+      - name: Deploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service "${{ vars.RAILWAY_SERVICE }}" --ci
+      - name: Smoke test
+        if: vars.API_BASE_URL != ''
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${{ vars.API_BASE_URL }}/api/v1/health/ready" || true)
+            [ "$code" = "200" ] && echo "ready" && exit 0
+            sleep 10
+          done
+          echo "::error::Service did not become ready"; exit 1

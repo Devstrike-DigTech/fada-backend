@@ -7,6 +7,7 @@ import {
   EVENTS,
   GeoRadiusExpandedPayload,
   SearchPerformedPayload,
+  SearchResultsServedPayload,
 } from '@common/types/events.types';
 import { DrugSearchQueryDto } from './dto/drug-search-query.dto';
 import { PharmacySearchQueryDto } from './dto/pharmacy-search-query.dto';
@@ -82,6 +83,11 @@ const DEFAULT_RADIUS_KM = 5;
 const RADIUS_STEPS = [5, 10, 20, 50]; // km — progressive expansion
 const MIN_RESULTS_FOR_EXPANSION = 3; // expand if fewer results than this
 
+/** Makes % and _ in user input match literally inside ILIKE patterns. */
+function escapeLike(input: string): string {
+  return input.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
 @Injectable()
 export class SearchService {
   private readonly logger = new Logger(SearchService.name);
@@ -150,7 +156,7 @@ export class SearchService {
             { skip: dto.skip, take: effectiveTake },
           );
 
-          await this.eventBus.emit(EVENTS.SEARCH.GEO_RADIUS_EXPANDED, {
+          this.eventBus.emit(EVENTS.SEARCH.GEO_RADIUS_EXPANDED, {
             userId,
             guestToken,
             query: dto.q,
@@ -174,10 +180,11 @@ export class SearchService {
     }
 
     // Emit analytics events
-    await this.eventBus.emit(EVENTS.SEARCH.PERFORMED, {
+    this.eventBus.emit(EVENTS.SEARCH.PERFORMED, {
       userId,
       guestToken,
       query: dto.q,
+      searchType: 'drug',
       latitude: dto.latitude,
       longitude: dto.longitude,
       radiusKm: finalRadiusKm ?? dto.radiusKm ?? DEFAULT_RADIUS_KM,
@@ -186,18 +193,19 @@ export class SearchService {
     } satisfies SearchPerformedPayload);
 
     if (result.total > 0) {
-      await this.eventBus.emit(EVENTS.SEARCH.DRUG_FOUND, {
+      this.eventBus.emit(EVENTS.SEARCH.DRUG_FOUND, {
         query: dto.q,
         count: result.total,
       });
     } else {
-      await this.eventBus.emit(EVENTS.SEARCH.DRUG_NOT_FOUND, {
+      this.eventBus.emit(EVENTS.SEARCH.DRUG_NOT_FOUND, {
         query: dto.q,
         userId,
         guestToken,
       });
     }
 
+    this.emitResultsServed('drug', dto.q, result, userId, guestToken);
     return {
       data: result.data,
       meta: {
@@ -258,7 +266,7 @@ export class SearchService {
             { skip: dto.skip, take: effectiveTake },
           );
 
-          await this.eventBus.emit(EVENTS.SEARCH.GEO_RADIUS_EXPANDED, {
+          this.eventBus.emit(EVENTS.SEARCH.GEO_RADIUS_EXPANDED, {
             userId,
             guestToken,
             query: dto.q ?? '',
@@ -276,6 +284,21 @@ export class SearchService {
       );
     }
 
+    if (dto.q) {
+      this.eventBus.emit(EVENTS.SEARCH.PERFORMED, {
+        userId,
+        guestToken,
+        query: dto.q,
+        searchType: 'pharmacy',
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        radiusKm: finalRadiusKm ?? dto.radiusKm ?? DEFAULT_RADIUS_KM,
+        resultCount: result.total,
+        searchedAt: new Date(),
+      } satisfies SearchPerformedPayload);
+    }
+
+    this.emitResultsServed('pharmacy', dto.q, result, userId, guestToken);
     return {
       data: result.data,
       meta: {
@@ -338,7 +361,7 @@ export class SearchService {
             { skip: dto.skip, take: effectiveTake },
           );
 
-          await this.eventBus.emit(EVENTS.SEARCH.GEO_RADIUS_EXPANDED, {
+          this.eventBus.emit(EVENTS.SEARCH.GEO_RADIUS_EXPANDED, {
             userId,
             guestToken,
             query: dto.q,
@@ -355,10 +378,11 @@ export class SearchService {
       });
     }
 
-    await this.eventBus.emit(EVENTS.SEARCH.PERFORMED, {
+    this.eventBus.emit(EVENTS.SEARCH.PERFORMED, {
       userId,
       guestToken,
       query: dto.q,
+      searchType: 'ailment',
       latitude: dto.latitude,
       longitude: dto.longitude,
       radiusKm: finalRadiusKm ?? dto.radiusKm ?? DEFAULT_RADIUS_KM,
@@ -366,6 +390,7 @@ export class SearchService {
       searchedAt: new Date(),
     } satisfies SearchPerformedPayload);
 
+    this.emitResultsServed('ailment', dto.q, result, userId, guestToken);
     return {
       data: result.data,
       meta: {
@@ -390,7 +415,7 @@ export class SearchService {
     filters: { prescriptionType?: string; categoryId?: string },
     pagination: PaginationArgs,
   ) {
-    const searchTerm = `%${q}%`;
+    const searchTerm = `%${escapeLike(q)}%`;
     const prescriptionType: string | null = filters.prescriptionType ?? null;
     const categoryId: string | null = filters.categoryId ?? null;
 
@@ -450,10 +475,10 @@ export class SearchService {
           OR   d.nafdac_number ILIKE $3
         )
         AND  ($4::text IS NULL OR d.prescription_type::text = $4::text)
-        AND  ($5::uuid IS NULL OR EXISTS (
+        AND  ($5::text IS NULL OR EXISTS (
                SELECT 1 FROM drug_category_map dcm
                WHERE  dcm.drug_id    = d.id
-                 AND  dcm.category_id = $5::uuid
+                 AND  dcm.category_id = $5::text
              ))
     `;
 
@@ -461,16 +486,32 @@ export class SearchService {
     const [countRows, drugRows] = await Promise.all([
       this.prisma.$queryRawUnsafe<Array<{ total: number }>>(
         `SELECT COUNT(*)::int AS total FROM (${innerSql}) sub WHERE sub.distance_km <= $6`,
-        lat, lng, searchTerm, prescriptionType, categoryId, radiusKm,
+        lat,
+        lng,
+        searchTerm,
+        prescriptionType,
+        categoryId,
+        radiusKm,
       ),
       this.prisma.$queryRawUnsafe<RawDrugResult[]>(
         `SELECT * FROM (${innerSql}) sub WHERE sub.distance_km <= $6 ORDER BY sub.distance_km ASC LIMIT $7 OFFSET $8`,
-        lat, lng, searchTerm, prescriptionType, categoryId, radiusKm, pagination.take, pagination.skip,
+        lat,
+        lng,
+        searchTerm,
+        prescriptionType,
+        categoryId,
+        radiusKm,
+        pagination.take,
+        pagination.skip,
       ),
     ]);
 
     const total = countRows[0]?.total ?? 0;
-    return this.buildResult(drugRows.map(this.mapDrugRow), total, pagination);
+    return this.buildResult(
+      drugRows.map((row) => this.mapDrugRow(row)),
+      total,
+      pagination,
+    );
   }
 
   // ─── Text Drug Search (ORM, no geo) ─────────────────────────────────────────
@@ -493,7 +534,8 @@ export class SearchService {
         { nafdacNumber: { contains: q, mode: 'insensitive' } },
       ],
       ...(filters.prescriptionType && {
-        prescriptionType: filters.prescriptionType as Prisma.EnumPrescriptionTypeNullableFilter,
+        prescriptionType:
+          filters.prescriptionType as Prisma.EnumPrescriptionTypeNullableFilter,
       }),
       ...(filters.categoryId && {
         categories: { some: { categoryId: filters.categoryId } },
@@ -540,7 +582,7 @@ export class SearchService {
         address: drug.branch.address,
         latitude: drug.branch.latitude,
         longitude: drug.branch.longitude,
-        distanceKm: null as null,
+        distanceKm: null,
       },
       pharmacy: {
         id: drug.branch.pharmacy.id,
@@ -567,9 +609,13 @@ export class SearchService {
     pagination: PaginationArgs,
   ) {
     // null params → SQL IS NULL check skips the filter
-    const nameTerm: string | null = q ? `%${q}%` : null;
-    const state: string | null = filters.state ? `%${filters.state}%` : null;
-    const city: string | null = filters.city ? `%${filters.city}%` : null;
+    const nameTerm: string | null = q ? `%${escapeLike(q)}%` : null;
+    const state: string | null = filters.state
+      ? `%${escapeLike(filters.state)}%`
+      : null;
+    const city: string | null = filters.city
+      ? `%${escapeLike(filters.city)}%`
+      : null;
 
     // $1=lat, $2=lng, $3=nameTerm, $4=state, $5=city
     const innerSql = `
@@ -622,16 +668,32 @@ export class SearchService {
     const [countRows, pharmacyRows] = await Promise.all([
       this.prisma.$queryRawUnsafe<Array<{ total: number }>>(
         `SELECT COUNT(*)::int AS total FROM (${innerSql}) sub WHERE sub.distance_km <= $6`,
-        lat, lng, nameTerm, state, city, radiusKm,
+        lat,
+        lng,
+        nameTerm,
+        state,
+        city,
+        radiusKm,
       ),
       this.prisma.$queryRawUnsafe<RawPharmacyResult[]>(
         `SELECT * FROM (${innerSql}) sub WHERE sub.distance_km <= $6 ORDER BY sub.distance_km ASC LIMIT $7 OFFSET $8`,
-        lat, lng, nameTerm, state, city, radiusKm, pagination.take, pagination.skip,
+        lat,
+        lng,
+        nameTerm,
+        state,
+        city,
+        radiusKm,
+        pagination.take,
+        pagination.skip,
       ),
     ]);
 
     const total = countRows[0]?.total ?? 0;
-    return this.buildResult(pharmacyRows.map(this.mapPharmacyRow), total, pagination);
+    return this.buildResult(
+      pharmacyRows.map((row) => this.mapPharmacyRow(row)),
+      total,
+      pagination,
+    );
   }
 
   // ─── Text Pharmacy Search (ORM, no geo) ─────────────────────────────────────
@@ -646,8 +708,12 @@ export class SearchService {
       isVerified: true,
       branches: { some: { isActive: true } },
       ...(q && { name: { contains: q, mode: 'insensitive' } }),
-      ...(filters.state && { state: { contains: filters.state, mode: 'insensitive' } }),
-      ...(filters.city && { city: { contains: filters.city, mode: 'insensitive' } }),
+      ...(filters.state && {
+        state: { contains: filters.state, mode: 'insensitive' },
+      }),
+      ...(filters.city && {
+        city: { contains: filters.city, mode: 'insensitive' },
+      }),
     };
 
     const [total, pharmacies] = await Promise.all([
@@ -692,12 +758,12 @@ export class SearchService {
               latitude: branch.latitude,
               longitude: branch.longitude,
               isHeadBranch: branch.isHeadBranch,
-              distanceKm: null as null,
+              distanceKm: null,
             }
           : null,
         inventory: {
           totalDrugs: pharmacy.branches.reduce((s, b) => s + b._count.drugs, 0),
-          inStockDrugs: null as null, // omitted in text search for perf
+          inStockDrugs: null, // omitted in text search for perf
         },
       };
     });
@@ -714,7 +780,7 @@ export class SearchService {
     radiusKm: number,
     pagination: PaginationArgs,
   ) {
-    const searchTerm = `%${q}%`;
+    const searchTerm = `%${escapeLike(q)}%`;
 
     // $1=lat, $2=lng, $3=searchTerm
     const innerSql = `
@@ -781,16 +847,28 @@ export class SearchService {
     const [countRows, drugRows] = await Promise.all([
       this.prisma.$queryRawUnsafe<Array<{ total: number }>>(
         `SELECT COUNT(*)::int AS total FROM (${innerSql}) sub WHERE sub.distance_km <= $4`,
-        lat, lng, searchTerm, radiusKm,
+        lat,
+        lng,
+        searchTerm,
+        radiusKm,
       ),
       this.prisma.$queryRawUnsafe<RawDrugResult[]>(
         `SELECT * FROM (${innerSql}) sub WHERE sub.distance_km <= $4 ORDER BY sub.distance_km ASC LIMIT $5 OFFSET $6`,
-        lat, lng, searchTerm, radiusKm, pagination.take, pagination.skip,
+        lat,
+        lng,
+        searchTerm,
+        radiusKm,
+        pagination.take,
+        pagination.skip,
       ),
     ]);
 
     const total = countRows[0]?.total ?? 0;
-    return this.buildResult(drugRows.map(this.mapDrugRow), total, pagination);
+    return this.buildResult(
+      drugRows.map((row) => this.mapDrugRow(row)),
+      total,
+      pagination,
+    );
   }
 
   // ─── Text Ailment Search (ORM, no geo) ──────────────────────────────────────
@@ -858,7 +936,7 @@ export class SearchService {
         address: drug.branch.address,
         latitude: drug.branch.latitude,
         longitude: drug.branch.longitude,
-        distanceKm: null as null,
+        distanceKm: null,
       },
       pharmacy: {
         id: drug.branch.pharmacy.id,
@@ -895,7 +973,7 @@ export class SearchService {
     const limitReached = count > GUEST_SEARCH_LIMIT;
 
     if (limitReached) {
-      await this.eventBus.emit(EVENTS.SEARCH.GUEST_LIMIT_REACHED, {
+      this.eventBus.emit(EVENTS.SEARCH.GUEST_LIMIT_REACHED, {
         guestToken,
         searchCount: count,
         limit: GUEST_SEARCH_LIMIT,
@@ -987,12 +1065,34 @@ export class SearchService {
     };
   }
 
-  private buildResult<T>(
-    data: T[],
-    total: number,
-    pagination: PaginationArgs,
-  ) {
-    const page = pagination.skip === 0 ? 1 : Math.floor(pagination.skip / pagination.take) + 1;
+  /** Tells analytics which pharmacies this search showed (one appearance each). */
+  private emitResultsServed(
+    searchType: SearchResultsServedPayload['searchType'],
+    query: string | undefined,
+    result: { data: unknown[]; total: number },
+    userId: string | undefined,
+    guestToken: string | undefined,
+  ): void {
+    const ids = new Set<string>();
+    for (const item of result.data as { pharmacy?: { id?: string } }[]) {
+      if (item?.pharmacy?.id) ids.add(item.pharmacy.id);
+    }
+    this.eventBus.emit(EVENTS.SEARCH.RESULTS_SERVED, {
+      searchType,
+      query: query?.trim() || undefined,
+      resultCount: result.total,
+      pharmacyIds: [...ids],
+      userId,
+      guestToken,
+      servedAt: new Date(),
+    } satisfies SearchResultsServedPayload);
+  }
+
+  private buildResult<T>(data: T[], total: number, pagination: PaginationArgs) {
+    const page =
+      pagination.skip === 0
+        ? 1
+        : Math.floor(pagination.skip / pagination.take) + 1;
     const limit = pagination.take;
     return {
       data,

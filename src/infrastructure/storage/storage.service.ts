@@ -5,7 +5,7 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class StorageService {
@@ -23,10 +23,7 @@ export class StorageService {
       'storage.r2.bucketName',
       'fada-storage',
     );
-    this.publicUrl = this.configService.get<string>(
-      'storage.r2.publicUrl',
-      '',
-    );
+    this.publicUrl = this.configService.get<string>('storage.r2.publicUrl', '');
 
     this.s3 = new S3Client({
       region: 'auto',
@@ -44,7 +41,7 @@ export class StorageService {
     folder: string,
     filename?: string,
   ): Promise<string> {
-    const key = `${folder}/${filename ?? uuidv4()}`;
+    const key = `${folder}/${filename ?? randomUUID()}`;
 
     await this.s3.send(
       new PutObjectCommand({

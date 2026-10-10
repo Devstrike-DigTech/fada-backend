@@ -141,6 +141,8 @@ limit     number   Items per page (default: 20)
 | POST | `/subscriptions/pharmacy/:pharmacyId/upgrade` | Pharmacist | Upgrade plan |
 | POST | `/subscriptions/pharmacy/:pharmacyId/cancel` | Pharmacist | Cancel subscription |
 | GET | `/subscriptions/pharmacy/:pharmacyId/billing-history` | Pharmacist | Billing history |
+| GET | `/subscriptions/payments/verify/:reference` | Pharmacist | Verify a checkout reference and activate if paid |
+| GET | `/subscriptions/payments/callback` | Public | Hosted-checkout return URL (Paystack `reference`, Flutterwave `tx_ref`) |
 | POST | `/subscriptions/webhook/paystack` | System | Paystack webhook |
 | POST | `/subscriptions/webhook/flutterwave` | System | Flutterwave webhook |
 
@@ -156,6 +158,99 @@ limit     number   Items per page (default: 20)
 | PUT | `/ads/pharmacy/:pharmacyId/campaigns/:id` | Pharmacist | Update campaign |
 | DELETE | `/ads/pharmacy/:pharmacyId/campaigns/:id` | Pharmacist | Delete campaign |
 | GET | `/ads/pharmacy/:pharmacyId/campaigns/:id/analytics` | Pharmacist | Campaign analytics |
+| POST | `/ads/pharmacy/:pharmacyId/campaigns/quote` | Pharmacist | Price preview (plan + promo discounts) |
+| POST | `/ads/pharmacy/:pharmacyId/campaigns/:id/checkout` | Pharmacist (owner) | Pay for a campaign via hosted checkout |
+| POST | `/ads/pharmacy/:pharmacyId/campaigns/:id/creative` | Pharmacist | Upload banner image |
+| PATCH | `/ads/pharmacy/:pharmacyId/campaigns/:id/status` | Pharmacist | Pause / resume / cancel |
+| POST | `/ads/:id/ratings` | Customer | Rate an ad (1–5 stars) |
+
+
+### Customer & Saves — additions (Phase 9)
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/saves/status` | Customer | Saved flags for given drug/pharmacy ids |
+| PATCH | `/saves/lists/:id/drugs/:drugId` | Customer | Change quantity in a list |
+| POST | `/saves/lists/:id/reserve` | Customer | Reserve the whole list at one branch |
+| DELETE | `/customer/history/searches` | Customer | Clear search history |
+
+
+### Points — additions (Phase 10)
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/points/rules` | Public | Earning rules |
+| GET | `/points/leaderboard/pharmacies` | Public | Top pharmacies by lifetime points |
+| POST | `/admin/points/adjust` | Admin | Credit / debit a ledger |
+
+
+### Notifications — additions (Phase 11)
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/notifications/unread-count` | Any user | Badge count |
+| GET | `/notifications/preferences` | Any user | Channel toggles + muted categories |
+| DELETE | `/notifications/:id` | Any user | Remove from history |
+| POST | `/admin/notifications/broadcast` | Admin | Announcement to a segment |
+| GET | `/admin/notifications/stats` | Admin | Delivery outcomes + recent failures |
+
+WebSocket: see `docs/REALTIME.md` for the full contract (rooms, subscribe acks, all events).
+
+
+### Support & Content — additions (Phase 12)
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/support/categories` | Public | Complaint categories + suggestion areas |
+| GET | `/support/complaints/:id` | User | Ticket with conversation |
+| POST | `/support/complaints/:id/messages` | User | Follow-up (reopens resolved) |
+| GET | `/support/suggestions` | User | My suggestions |
+| GET | `/content` | Public | Page index with versions |
+| GET | `/content/good-cause` | Public | Stats + projects + testimonials |
+| GET | `/content/good-cause/projects/:id` | Public | Project with testimonials |
+| GET | `/content/pages/:key` | Public | Any page by key or slug |
+| GET/PATCH | `/admin/support/tickets[/:id]` | Admin | Ticket queue, triage |
+| POST | `/admin/support/tickets/:id/messages` | Admin | Reply or internal note |
+| GET/PATCH | `/admin/support/suggestions[/:id]` | Admin | Suggestion review |
+| GET | `/admin/support/summary` | Admin | Queue health counts |
+| GET/PUT | `/admin/content/pages[/:key]` | Admin | Edit pages; `POST …/reset` restores default |
+| CRUD | `/admin/content/good-cause/projects` | Admin | Projects + `POST …/:id/image` |
+| CRUD | `/admin/content/good-cause/testimonials` | Admin | Testimonials + `POST …/:id/avatar` |
+
+
+### Analytics (Phase 13)
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/analytics/pharmacy/:id/access` | Owner/operator | Plan includes analytics? (upgrade prompt) |
+| GET | `/analytics/pharmacy/:id/overview` | Owner/operator (Zuko+) | Totals, % change, KPIs, daily series |
+| GET | `/analytics/pharmacy/:id/reservations` | Owner/operator (Zuko+) | Outcomes, timing, branches, peak hours |
+| GET | `/analytics/pharmacy/:id/inventory` | Owner/operator (Zuko+) | Slots, stock, top drugs, restock, expiry |
+| GET | `/analytics/pharmacy/:id/search-appearances` | Owner/operator (Zuko+) | Appearances, queries, unmet demand |
+| GET | `/analytics/pharmacy/:id/ads` | Owner/operator (Zuko+) | Impressions, clicks, CTR, spend, campaigns |
+| GET | `/admin/analytics/platform` | Admin | Platform growth, reservations, search, revenue |
+| GET | `/admin/analytics/search-trends` | Admin | Top and zero-result searches |
+| GET | `/admin/analytics/pharmacies/leaderboard` | Admin | Top pharmacies by metric |
+| POST | `/admin/analytics/snapshots/rebuild` | Admin | Recompute daily snapshots |
+
+All analytics periods: `?period=7d|30d|90d|365d` or `?from=YYYY-MM-DD&to=YYYY-MM-DD` (Lagos days).
+
+### Back office (`/admin`)
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/admin/dashboard/overview` | Admin | Platform-wide snapshot |
+| GET | `/admin/dashboard/audit-logs` | Admin | Admin action trail |
+| GET | `/admin/subscriptions` | Admin | All subscriptions (filters) |
+| GET | `/admin/subscriptions/revenue` | Admin | MRR, by-plan counts, 30-day revenue |
+| GET | `/admin/subscriptions/:pharmacyId` | Admin | Subscription detail + billing |
+| POST | `/admin/subscriptions/:pharmacyId/assign-plan` | Admin | Comp a plan without payment |
+| POST | `/admin/subscriptions/:pharmacyId/extend` | Admin | Extend period by N days |
+| POST | `/admin/subscriptions/:pharmacyId/cancel` | Admin | Cancel (period end or immediate) |
+| GET | `/admin/ads/overview` | Admin | Campaign counts, review queue, engagement, ad revenue |
+| GET | `/admin/ads/campaigns` | Admin | All campaigns (pending review first) |
+| GET | `/admin/ads/campaigns/:id` | Admin | Campaign + analytics + billing |
+| POST | `/admin/ads/campaigns/:id/review` | Admin | Approve / reject |
+| POST | `/admin/ads/campaigns/:id/status` | Admin | Force pause / resume / cancel |
+| GET | `/admin/promotions` | Admin | List promotions |
+| POST | `/admin/promotions` | Admin | Create seasonal discount or promo code |
+| GET | `/admin/promotions/:id` | Admin | Promotion + recent redemptions |
+| PATCH | `/admin/promotions/:id` | Admin | Update |
+| DELETE | `/admin/promotions/:id` | Admin | Deactivate |
 
 ### Customer Profile (`/customer`)
 | Method | Path | Auth | Description |

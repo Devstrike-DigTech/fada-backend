@@ -4,7 +4,10 @@ import { Job } from 'bull';
 import { PrismaService } from '@infra/database/prisma.service';
 import { EventBusService } from '@infra/events/event-bus.service';
 import { PcnRegistryService } from '@infra/registries/pcn-registry.service';
-import { EVENTS, PcnVerificationRequestedPayload } from '@common/types/events.types';
+import {
+  EVENTS,
+  PcnVerificationRequestedPayload,
+} from '@common/types/events.types';
 import { QUEUE_NAMES } from '@infra/queue/queue.constants';
 
 @Processor(QUEUE_NAMES.VERIFICATION_PCN)
@@ -34,7 +37,9 @@ export class PcnVerificationProcessor {
     });
 
     if (!profile) {
-      this.logger.warn(`PharmacistProfile not found for userId ${pharmacistId}`);
+      this.logger.warn(
+        `PharmacistProfile not found for userId ${pharmacistId}`,
+      );
       return;
     }
 
@@ -52,9 +57,7 @@ export class PcnVerificationProcessor {
       const result = await this.pcnRegistry.lookupLicense(licenseNumber);
       isValid = result.found;
 
-      this.logger.log(
-        `PCN lookup for ${licenseNumber}: found=${result.found}`,
-      );
+      this.logger.log(`PCN lookup for ${licenseNumber}: found=${result.found}`);
     } catch (err) {
       this.logger.error(
         `PCN registry call failed for ${licenseNumber}: ${(err as Error).message}`,

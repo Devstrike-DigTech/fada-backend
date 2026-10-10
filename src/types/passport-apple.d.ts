@@ -17,7 +17,10 @@ declare module 'passport-apple' {
   }
 
   export class Strategy extends PassportStrategy {
-    constructor(options: AuthenticateOptions, verify: (...args: unknown[]) => void);
+    constructor(
+      options: AuthenticateOptions,
+      verify: (...args: unknown[]) => void,
+    );
     name: string;
     authenticate(req: unknown, options?: unknown): void;
   }
