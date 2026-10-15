@@ -66,15 +66,36 @@ export class PcnVerificationProcessor {
       throw err;
     }
 
-    // Update the profile
-    await this.prisma.pharmacistProfile.update({
-      where: { userId: pharmacistId },
-      data: {
-        pcnVerified: isValid,
-        pcnVerifiedAt: isValid ? new Date() : null,
-        pcnVerificationSource: 'auto',
-      },
-    });
+    // The lookup can take a while; an admin may have approved the licence
+    // meanwhile. Never let this job undo that: only an unverified licence
+    // is changed, and a miss changes nothing because it is already false.
+    if (isValid) {
+      const { count } = await this.prisma.pharmacistProfile.updateMany({
+        where: { userId: pharmacistId, pcnVerified: false },
+        data: {
+          pcnVerified: true,
+          pcnVerifiedAt: new Date(),
+          pcnVerificationSource: 'auto',
+        },
+      });
+      if (count === 0) {
+        this.logger.log(
+          `Pharmacist ${pharmacistId} was verified during the lookup — leaving it`,
+        );
+        return;
+      }
+    } else {
+      const now = await this.prisma.pharmacistProfile.findUnique({
+        where: { userId: pharmacistId },
+        select: { pcnVerified: true },
+      });
+      if (now?.pcnVerified) {
+        this.logger.log(
+          `Registry has no match for ${licenseNumber}, but pharmacist ${pharmacistId} was verified by hand — leaving it`,
+        );
+        return;
+      }
+    }
 
     if (isValid) {
       this.logger.log(`PCN verified for pharmacist ${pharmacistId}`);
