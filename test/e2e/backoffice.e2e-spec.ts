@@ -270,10 +270,30 @@ describe('Back office, content, analytics and lifecycle jobs', () => {
       .get(api('/admin/categories?type=primary'))
       .set(bearer(admin))
       .expect(200);
-    await t.http
+    const del = await t.http
       .delete(api(`/admin/categories/${cat.body.data.id}`))
       .set(bearer(admin))
       .expect(200);
+    expect(del.body.data.category).toMatchObject({
+      id: cat.body.data.id,
+      name: 'Travel Health',
+    });
+    const categoryTrail = await t.prisma.adminAuditLog.findMany({
+      where: { targetId: cat.body.data.id, adminUserId: admin.id },
+    });
+    const byAction = new Map(categoryTrail.map((a) => [a.action, a.details]));
+    expect([...byAction.keys()].sort()).toEqual([
+      'category.created',
+      'category.deleted',
+      'category.updated',
+    ]);
+    expect(byAction.get('category.updated')).toMatchObject({
+      changes: { sortOrder: 99 },
+    });
+    expect(byAction.get('category.deleted')).toMatchObject({
+      type: 'primary',
+      name: 'Travel Health',
+    });
     await t.http
       .get(api('/admin/pharmacists/unverified'))
       .set(bearer(admin))

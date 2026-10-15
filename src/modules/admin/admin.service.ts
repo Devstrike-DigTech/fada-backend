@@ -337,6 +337,14 @@ export class AdminService {
     if (!category) throw new NotFoundException('Category not found');
 
     await this.prisma.drugCategory.delete({ where: { id } });
-    return { message: `Category "${category.name}" deleted` };
+    return {
+      message: `Category "${category.name}" deleted`,
+      category: {
+        id: category.id,
+        type: category.type,
+        name: category.name,
+        slug: category.slug,
+      },
+    };
   }
 }

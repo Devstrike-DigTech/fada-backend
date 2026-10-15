@@ -100,11 +100,37 @@ describe('Marketplace: onboarding → verification → search → reservation', 
 
   it('becomes verified when an admin confirms the PCN licence, and the owner is told', async () => {
     const admin = await createAdmin(t);
+    // The faked registry has no match, so an automatic retry finds nothing
+    const retry = await t.http
+      .post(api(`/admin/pharmacists/${s.ownerId}/retry-pcn`))
+      .set(bearer(admin))
+      .expect(200);
+    expect(retry.body.data.found).toBe(false);
+    const retried = await t.prisma.adminAuditLog.findFirst({
+      where: {
+        action: 'pharmacist.pcn.retried',
+        adminUserId: admin.id,
+        targetId: s.ownerId,
+      },
+    });
+    expect(retried?.details).toEqual({ found: false });
+
     await t.http
       .post(api(`/admin/pharmacists/${s.ownerId}/verify-pcn`))
       .set(bearer(admin))
       .send({ note: 'Licence checked by phone with PCN Enugu office' })
       .expect(200);
+    const verified = await t.prisma.adminAuditLog.findFirst({
+      where: {
+        action: 'pharmacist.pcn.verified',
+        adminUserId: admin.id,
+        targetId: s.ownerId,
+      },
+    });
+    expect(verified?.details).toEqual({
+      source: 'manual',
+      note: 'Licence checked by phone with PCN Enugu office',
+    });
 
     const p = await eventually(() =>
       t.prisma.pharmacy.findFirst({

@@ -104,16 +104,24 @@ export class AdminController {
   @ApiResponse({ status: 200, description: 'PCN manually verified' })
   @ApiResponse({ status: 400, description: 'Already verified' })
   @ApiResponse({ status: 404, description: 'Pharmacist not found' })
-  overridePcnVerification(
+  async overridePcnVerification(
     @Param('userId') userId: string,
     @Body() dto: OverridePcnVerificationDto,
     @CurrentUser() admin: CurrentUserData,
   ) {
-    return this.adminService.overridePcnVerification(
+    const result = await this.adminService.overridePcnVerification(
       userId,
       admin.sub,
       dto.note,
     );
+    await this.audit.log({
+      adminUserId: admin.sub,
+      action: 'pharmacist.pcn.verified',
+      targetType: 'user',
+      targetId: userId,
+      details: { source: 'manual', note: dto.note ?? null },
+    });
+    return result;
   }
 
   // ─── Retry Auto PCN Verification ─────────────────────────────────────────
@@ -126,8 +134,19 @@ export class AdminController {
   @ApiParam({ name: 'userId', description: 'The pharmacist user ID' })
   @ApiResponse({ status: 200, description: 'Lookup result returned' })
   @ApiResponse({ status: 404, description: 'Pharmacist not found' })
-  retryPcnVerification(@Param('userId') userId: string) {
-    return this.adminService.retryPcnVerification(userId);
+  async retryPcnVerification(
+    @Param('userId') userId: string,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    const result = await this.adminService.retryPcnVerification(userId);
+    await this.audit.log({
+      adminUserId: admin.sub,
+      action: 'pharmacist.pcn.retried',
+      targetType: 'user',
+      targetId: userId,
+      details: { found: result.found },
+    });
+    return result;
   }
 
   // ─── Pharmacy verification ───────────────────────────────────────────────
@@ -189,21 +208,63 @@ export class AdminController {
   @Post('categories')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new drug category' })
-  createCategory(@Body() dto: CreateCategoryDto) {
-    return this.adminService.createCategory(dto);
+  async createCategory(
+    @Body() dto: CreateCategoryDto,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    const category = await this.adminService.createCategory(dto);
+    await this.audit.log({
+      adminUserId: admin.sub,
+      action: 'category.created',
+      targetType: 'drug_category',
+      targetId: category.id,
+      details: {
+        type: category.type,
+        name: category.name,
+        slug: category.slug,
+      },
+    });
+    return category;
   }
 
   @Patch('categories/:id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Update a drug category' })
-  updateCategory(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
-    return this.adminService.updateCategory(id, dto);
+  async updateCategory(
+    @Param('id') id: string,
+    @Body() dto: UpdateCategoryDto,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    const category = await this.adminService.updateCategory(id, dto);
+    await this.audit.log({
+      adminUserId: admin.sub,
+      action: 'category.updated',
+      targetType: 'drug_category',
+      targetId: id,
+      details: { slug: category.slug, changes: { ...dto } },
+    });
+    return category;
   }
 
   @Delete('categories/:id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete a drug category' })
-  deleteCategory(@Param('id') id: string) {
-    return this.adminService.deleteCategory(id);
+  async deleteCategory(
+    @Param('id') id: string,
+    @CurrentUser() admin: CurrentUserData,
+  ) {
+    const result = await this.adminService.deleteCategory(id);
+    await this.audit.log({
+      adminUserId: admin.sub,
+      action: 'category.deleted',
+      targetType: 'drug_category',
+      targetId: id,
+      details: {
+        type: result.category.type,
+        name: result.category.name,
+        slug: result.category.slug,
+      },
+    });
+    return result;
   }
 }
