@@ -26,9 +26,11 @@ import {
   CurrentUserData,
 } from '@common/decorators/current-user.decorator';
 import { AdminService } from './admin.service';
+import { AdminAuditService } from './admin-audit.service';
 import { PharmacyVerificationService } from '@modules/verification/pharmacy-verification.service';
 import { OverridePcnVerificationDto } from './dto/override-pcn-verification.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
+import { AdminQueryDto } from './dto/admin-query.dto';
 import {
   CreateCategoryDto,
   UpdateCategoryDto,
@@ -43,18 +45,39 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly verification: PharmacyVerificationService,
+    private readonly audit: AdminAuditService,
   ) {}
 
-  // ─── Create Admin ────────────────────────────────────────────────────────
+  // ─── Admin accounts ──────────────────────────────────────────────────────
+
+  @Get('admins')
+  @ApiOperation({ summary: 'List admin accounts' })
+  @ApiResponse({ status: 200, description: 'Paginated admin accounts' })
+  listAdmins(@Query() query: AdminQueryDto) {
+    return this.adminService.listAdmins(query);
+  }
 
   @Post('admins')
-  // @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new admin account' })
   @ApiResponse({ status: 201, description: 'Admin created' })
   @ApiResponse({ status: 409, description: 'Email already exists' })
-  createAdmin(@Body() dto: CreateAdminDto) {
-    return this.adminService.createAdmin(dto.email, dto.password);
+  async createAdmin(
+    @CurrentUser() admin: CurrentUserData,
+    @Body() dto: CreateAdminDto,
+  ) {
+    const created = await this.adminService.createAdmin(
+      dto.email,
+      dto.password,
+    );
+    await this.audit.log({
+      adminUserId: admin.sub,
+      action: 'admin.created',
+      targetType: 'user',
+      targetId: created.id,
+      details: { email: created.email },
+    });
+    return created;
   }
 
   // ─── List Unverified Pharmacists ─────────────────────────────────────────

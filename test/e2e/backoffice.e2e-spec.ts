@@ -197,6 +197,54 @@ describe('Back office, content, analytics and lifecycle jobs', () => {
       .expect(200);
   });
 
+  it('admin accounts: create, list with search and paging, admin-only', async () => {
+    const email = `ops.${Date.now()}@test.ng`;
+    await t.http
+      .post(api('/admin/admins'))
+      .set(bearer(admin))
+      .send({ email, password: 'Ops!Pass123' })
+      .expect(201);
+
+    const all = await t.http
+      .get(api('/admin/admins'))
+      .set(bearer(admin))
+      .expect(200);
+    const emails = all.body.data.items.map((a: { email: string }) => a.email);
+    expect(emails).toEqual(expect.arrayContaining([admin.email, email]));
+    expect(all.body.data.meta).toMatchObject({ page: 1, limit: 20 });
+    expect(all.body.data.meta.total).toBeGreaterThanOrEqual(2);
+    for (const row of all.body.data.items) {
+      expect(row).not.toHaveProperty('passwordHash');
+      expect(row).toHaveProperty('fadaId');
+    }
+
+    const found = await t.http
+      .get(
+        api(`/admin/admins?search=${encodeURIComponent(email.toUpperCase())}`),
+      )
+      .set(bearer(admin))
+      .expect(200);
+    expect(found.body.data.items).toHaveLength(1);
+    expect(found.body.data.items[0].email).toBe(email);
+
+    const paged = await t.http
+      .get(api('/admin/admins?limit=1&page=2'))
+      .set(bearer(admin))
+      .expect(200);
+    expect(paged.body.data.items).toHaveLength(1);
+    expect(paged.body.data.meta).toMatchObject({ page: 2, limit: 1 });
+
+    const audit = await t.prisma.adminAuditLog.findFirst({
+      where: { action: 'admin.created', adminUserId: admin.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(audit?.details).toEqual({ email });
+
+    const customer = await createCustomer(t);
+    await t.http.get(api('/admin/admins')).set(bearer(customer)).expect(403);
+    await t.http.get(api('/admin/admins')).expect(401);
+  });
+
   it('back office: dashboard, categories, pharmacists queue, subscriptions, points, broadcast, audit', async () => {
     const dash = await t.http
       .get(api('/admin/dashboard/overview'))

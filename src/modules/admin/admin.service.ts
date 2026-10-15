@@ -6,6 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@infra/database/prisma.service';
 import { EventBusService } from '@infra/events/event-bus.service';
 import { PcnRegistryService } from '@infra/registries/pcn-registry.service';
@@ -14,6 +15,7 @@ import {
   CreateCategoryDto,
   UpdateCategoryDto,
 } from './dto/manage-category.dto';
+import { AdminQueryDto } from './dto/admin-query.dto';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -55,13 +57,55 @@ export class AdminService {
       },
     });
 
-    this.logger.log(`Admin created: ${user.id} by internal call`);
+    this.logger.log(`Admin created: ${user.id}`);
 
     return {
       id: user.id,
       email: user.email,
       fadaId: user.fadaId,
       role: user.role,
+    };
+  }
+
+  // ─── List Admins ────────────────────────────────────────────────────────────
+
+  /** Back-office accounts, newest first. Never returns password hashes. */
+  async listAdmins(query: AdminQueryDto) {
+    const where: Prisma.UserWhereInput = { role: 'admin' };
+    if (query.search) {
+      where.OR = [
+        { email: { contains: query.search, mode: 'insensitive' } },
+        { firstName: { contains: query.search, mode: 'insensitive' } },
+        { lastName: { contains: query.search, mode: 'insensitive' } },
+        { fadaId: { contains: query.search, mode: 'insensitive' } },
+      ];
+    }
+    const [items, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+        skip: query.skip,
+        take: query.take,
+        select: {
+          id: true,
+          fadaId: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          isActive: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+    return {
+      items,
+      meta: {
+        page: query.page ?? 1,
+        limit: query.take,
+        total,
+        totalPages: Math.ceil(total / query.take),
+      },
     };
   }
 

@@ -235,6 +235,8 @@ All analytics periods: `?period=7d|30d|90d|365d` or `?from=YYYY-MM-DD&to=YYYY-MM
 |---|---|---|---|
 | GET | `/admin/dashboard/overview` | Admin | Platform-wide snapshot |
 | GET | `/admin/dashboard/audit-logs` | Admin | Admin action trail |
+| GET | `/admin/admins` | Admin | Admin accounts; `search` by name, email or FADA ID, paginated |
+| POST | `/admin/admins` | Admin | Create an admin account (audited as `admin.created`) |
 | GET | `/admin/subscriptions` | Admin | All subscriptions (filters) |
 | GET | `/admin/subscriptions/revenue` | Admin | MRR, by-plan counts, 30-day revenue |
 | GET | `/admin/subscriptions/:pharmacyId` | Admin | Subscription detail + billing |
