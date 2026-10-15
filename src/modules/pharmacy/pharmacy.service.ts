@@ -661,6 +661,83 @@ export class PharmacyService {
     };
   }
 
+  /** Where a staff member works: one row per pharmacy they belong to. */
+  async myMemberships(userId: string) {
+    const rows = await this.prisma.pharmacyStaff.findMany({
+      where: { userId, isActive: true, pharmacy: { isActive: true } },
+      include: {
+        pharmacy: {
+          select: {
+            id: true,
+            fadaId: true,
+            name: true,
+            isVerified: true,
+            phone: true,
+            branches: {
+              where: { isActive: true },
+              select: {
+                id: true,
+                name: true,
+                address: true,
+                isHeadBranch: true,
+              },
+            },
+          },
+        },
+        branch: { select: { id: true, name: true, address: true } },
+      },
+      orderBy: { joinedAt: 'asc' },
+    });
+    return rows.map((m) => ({
+      role: m.role,
+      pharmacy: {
+        id: m.pharmacy.id,
+        fadaId: m.pharmacy.fadaId,
+        name: m.pharmacy.name,
+        isVerified: m.pharmacy.isVerified,
+        phone: m.pharmacy.phone,
+      },
+      // A pharmacy-wide member works at every active branch
+      branches: m.branch
+        ? [m.branch]
+        : m.pharmacy.branches.map(({ id, name, address }) => ({
+            id,
+            name,
+            address,
+          })),
+      joinedAt: m.joinedAt,
+    }));
+  }
+
+  /** What an invitee sees before accepting. Never reveals the inviter's data. */
+  async previewInvite(token: string) {
+    const invite = await this.prisma.pharmacyStaffInvite.findUnique({
+      where: { token },
+      include: {
+        pharmacy: { select: { name: true } },
+        branch: { select: { name: true } },
+      },
+    });
+    if (!invite) throw new NotFoundException('Invite not found');
+    const hasAccount =
+      (await this.prisma.user.count({ where: { email: invite.email } })) > 0;
+    return {
+      pharmacyName: invite.pharmacy.name,
+      branchName: invite.branch?.name ?? null,
+      role: invite.role,
+      firstName: invite.firstName,
+      lastName: invite.lastName,
+      email: invite.email,
+      hasAccount,
+      expiresAt: invite.expiresAt,
+      status: invite.acceptedAt
+        ? 'accepted'
+        : invite.expiresAt < new Date()
+          ? 'expired'
+          : 'pending',
+    };
+  }
+
   async getStaff(requesterUserId: string, pharmacyId: string) {
     await this.assertOwnerOrOperator(requesterUserId, pharmacyId);
 

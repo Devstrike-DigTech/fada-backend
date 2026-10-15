@@ -9,10 +9,12 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -82,6 +84,71 @@ export class PharmacyController {
   async getMyVerification(@CurrentUser() user: CurrentUserData) {
     const pharmacy = await this.pharmacyService.getMyPharmacy(user.sub);
     return this.verification.status(pharmacy.id);
+  }
+
+  // ─── Staff self-service (before :pharmacyId routes) ────────────────────────
+
+  @Get('staff/me')
+  @Roles(UserRole.STAFF, UserRole.PHARMACIST)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Pharmacies and branches the signed-in staff member works at',
+  })
+  myMemberships(@CurrentUser() user: CurrentUserData) {
+    return this.pharmacyService.myMemberships(user.sub);
+  }
+
+  @Get('staff/invites/:token')
+  @Public()
+  @ApiOperation({
+    summary: 'Preview a staff invite before accepting (pharmacy, branch, role)',
+  })
+  previewInvite(@Param('token') token: string) {
+    return this.pharmacyService.previewInvite(token);
+  }
+
+  @Get('staff/join/:token')
+  @Public()
+  @ApiOperation({
+    summary:
+      'Landing page the invite email links to; opens the FADA Pharmacy app at the invite',
+  })
+  async joinPage(@Param('token') token: string, @Res() res: Response) {
+    let title = 'Join your team on FADA';
+    let body =
+      'This invite link is not valid. Ask the pharmacy owner to send a new one.';
+    let ok = false;
+    try {
+      const p = await this.pharmacyService.previewInvite(token);
+      ok = p.status === 'pending';
+      title = `Join ${p.pharmacyName} on FADA`;
+      body =
+        p.status === 'accepted'
+          ? 'This invite has already been used. Sign in to the FADA Pharmacy app.'
+          : p.status === 'expired'
+            ? 'This invite has expired. Ask the pharmacy owner to send a new one.'
+            : `${p.firstName}, you’re invited as ${p.role === 'operator' ? 'an operator' : 'staff'}` +
+              `${p.branchName ? ` at ${p.branchName}` : ''}. Open the FADA Pharmacy app to set your password and start.`;
+    } catch {
+      // unknown token: keep the generic message
+    }
+    const esc = (s: string) =>
+      s.replace(
+        /[&<>"]/g,
+        (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!,
+      );
+    const appLink = `fadapharmacy://open/join/${encodeURIComponent(token)}`;
+    res.type('html').send(`<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
+<style>body{margin:0;font:16px -apple-system,system-ui,sans-serif;background:#f5f8f7;color:#10231f;display:grid;place-items:center;min-height:100vh}
+.card{background:#fff;border-radius:22px;padding:30px 24px;width:min(380px,88vw);box-shadow:0 10px 30px rgba(16,35,31,.08);text-align:center}
+.mark{width:56px;height:56px;border-radius:16px;background:#399386;margin:0 auto 18px}
+h1{font-size:22px;margin:0 0 10px}p{color:#4b605b;line-height:1.5;margin:0 0 22px}
+a{display:block;background:#399386;color:#fff;text-decoration:none;font-weight:700;border-radius:14px;padding:16px}
+small{display:block;color:#889a95;margin-top:16px;font-size:13px}</style></head>
+<body><div class="card"><div class="mark"></div><h1>${esc(title)}</h1><p>${esc(body)}</p>
+${ok ? `<a href="${appLink}">Open FADA Pharmacy</a><small>No app yet? Install FADA Pharmacy, then tap this link again.</small>` : ''}
+</div></body></html>`);
   }
 
   // ─── Update Pharmacy ────────────────────────────────────────────────────────

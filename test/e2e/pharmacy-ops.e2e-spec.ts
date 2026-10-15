@@ -129,6 +129,92 @@ describe('Pharmacy operations and inventory', () => {
       .expect(403);
   });
 
+  it('lets an invited operator preview, join from the email link and work their branch', async () => {
+    const email = `operator.${Date.now()}@test.ng`;
+    await t.http
+      .post(api(`/pharmacy/${ph.pharmacyId}/staff/invite`))
+      .set(bearer(ph.owner))
+      .send({
+        firstName: 'Ngozi',
+        lastName: 'Eze',
+        email,
+        role: 'operator',
+        branchId: ph.branchId,
+      })
+      .expect(200);
+    const { token } = await t.prisma.pharmacyStaffInvite.findFirstOrThrow({
+      where: { email },
+    });
+
+    // The email links to a landing page that opens the app at the invite
+    const page = await t.http
+      .get(api(`/pharmacy/staff/join/${token}`))
+      .expect(200);
+    expect(page.headers['content-type']).toMatch(/text\/html/);
+    expect(page.text).toContain(`fadapharmacy://open/join/${token}`);
+    const bogus = await t.http
+      .get(api('/pharmacy/staff/join/nope'))
+      .expect(200);
+    expect(bogus.text).not.toContain('fadapharmacy://');
+
+    const preview = await t.http
+      .get(api(`/pharmacy/staff/invites/${token}`))
+      .expect(200);
+    expect(preview.body.data).toMatchObject({
+      role: 'operator',
+      firstName: 'Ngozi',
+      email,
+      hasAccount: false,
+      status: 'pending',
+    });
+    expect(preview.body.data.branchName).toBeTruthy();
+
+    const joined = await t.http
+      .post(api(`/pharmacy/staff/accept-invite/${token}`))
+      .send({ password: 'Staff!Pass1' })
+      .expect(200);
+    const staff = { token: joined.body.data.tokens.accessToken };
+    const again = await t.http
+      .get(api(`/pharmacy/staff/invites/${token}`))
+      .expect(200);
+    expect(again.body.data.status).toBe('accepted');
+
+    // Where they work
+    const me = await t.http
+      .get(api('/pharmacy/staff/me'))
+      .set(bearer(staff))
+      .expect(200);
+    expect(me.body.data).toHaveLength(1);
+    expect(me.body.data[0]).toMatchObject({
+      role: 'operator',
+      pharmacy: { id: ph.pharmacyId },
+      branches: [{ id: ph.branchId }],
+    });
+
+    // Their branch's shelf, but not the owner's billing
+    await t.http
+      .get(api(`/inventory/branch/${ph.branchId}`))
+      .set(bearer(staff))
+      .expect(200);
+    await t.http
+      .get(api(`/subscriptions/pharmacy/${ph.pharmacyId}`))
+      .set(bearer(staff))
+      .expect(403);
+
+    // They can fix their own name
+    const renamed = await t.http
+      .patch(api('/users/me'))
+      .set(bearer(staff))
+      .send({ firstName: 'Ngozika' })
+      .expect(200);
+    expect(renamed.body.data.firstName).toBe('Ngozika');
+    await t.http
+      .patch(api('/users/me'))
+      .set(bearer(staff))
+      .send({})
+      .expect(400);
+  });
+
   it('manages drugs: add with NAFDAC enrichment, update, stock, alternatives, delete', async () => {
     const cats = await t.http.get(api('/inventory/categories')).expect(200);
     const primary = cats.body.data.primary.find(

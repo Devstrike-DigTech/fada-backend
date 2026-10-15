@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   HttpCode,
   HttpStatus,
@@ -20,11 +21,20 @@ import {
   CurrentUserData,
 } from '@common/decorators/current-user.decorator';
 import { UserService } from './user.service';
+import { UpdateMeDto } from './dto/update-me.dto';
 
 @ApiTags('User')
 @Controller({ path: 'users', version: '1' })
 export class UserController {
   constructor(private readonly userService: UserService) {}
+
+  @Patch('me')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Update your own first and last name' })
+  updateMe(@CurrentUser() user: CurrentUserData, @Body() dto: UpdateMeDto) {
+    return this.userService.updateMe(user.sub, dto);
+  }
 
   @Patch('me/avatar')
   @HttpCode(HttpStatus.OK)

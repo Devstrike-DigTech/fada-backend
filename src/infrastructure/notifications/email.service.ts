@@ -175,7 +175,8 @@ export class EmailService {
     expiresInHours: number;
   }): string {
     const appUrl = process.env.APP_URL ?? 'http://localhost:3000';
-    const acceptUrl = `${appUrl}/staff/accept-invite/${opts.token}`;
+    // The landing page opens the app at the invite (fadapharmacy://open/join/…)
+    const acceptUrl = `${appUrl}/api/v1/pharmacy/staff/join/${opts.token}`;
     const roleLabel = opts.role === 'operator' ? 'Operator' : 'Staff Member';
 
     return /* html */ `<!DOCTYPE html>

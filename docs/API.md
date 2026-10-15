@@ -78,6 +78,10 @@ X-Device-ID: {device_fingerprint}
 | GET | `/pharmacy/me` | Pharmacist | The logged-in pharmacist's pharmacy |
 | GET | `/pharmacy/me/verification` | Pharmacist | Verification status: PCN licence and CAC registration, with what is missing |
 | GET | `/pharmacy/:id` | Public | Public pharmacy profile |
+| GET | `/pharmacy/staff/me` | Staff/Pharmacist | Pharmacies and branches the signed-in staff member works at |
+| GET | `/pharmacy/staff/invites/:token` | Public | Invite preview: pharmacy, branch, role, invitee, status |
+| GET | `/pharmacy/staff/join/:token` | Public | HTML landing page from the invite email; opens `fadapharmacy://open/join/:token` |
+| POST | `/pharmacy/staff/accept-invite/:token` | Public | Accept (sets a password for new accounts); returns user + tokens |
 | PUT | `/pharmacies/:id/profile` | Pharmacist | Update profile |
 | POST | `/pharmacies/:id/images` | Pharmacist | Upload pharmacy photos |
 | GET | `/pharmacies/:id/branches` | Public | List branches |
@@ -259,6 +263,12 @@ All analytics periods: `?period=7d|30d|90d|365d` or `?from=YYYY-MM-DD&to=YYYY-MM
 | GET | `/admin/promotions/:id` | Admin | Promotion + recent redemptions |
 | PATCH | `/admin/promotions/:id` | Admin | Update |
 | DELETE | `/admin/promotions/:id` | Admin | Deactivate |
+
+### Users (`/users`)
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| PATCH | `/users/me` | Any | Update your own first and last name |
+| PATCH | `/users/me/avatar` | Any | Upload a profile picture |
 
 ### Customer Profile (`/customer`)
 | Method | Path | Auth | Description |
