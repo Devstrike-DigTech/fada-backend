@@ -127,14 +127,16 @@ limit     number   Items per page (default: 20)
 ### Reservations (`/reservations`)
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/reservations` | Customer/Guest | Create reservation |
-| POST | `/reservations/from-list` | Customer | Batch reserve from list |
-| GET | `/reservations/:id` | Customer/Pharmacist | Reservation detail |
-| GET | `/reservations/customer/:customerId` | Customer | Customer's reservations |
-| GET | `/reservations/pharmacy/:pharmacyId` | Pharmacist | Pharmacy reservation feed |
-| POST | `/reservations/verify` | Pharmacist | Verify QR/code |
-| PUT | `/reservations/:id/serve` | Pharmacist | Mark as served |
-| PUT | `/reservations/:id/cancel` | Customer/Pharmacist | Cancel reservation |
+| POST | `/reservations` | Customer | Reserve one or more drugs at a branch (expires after 2 hours) |
+| GET | `/reservations/mine` | Customer | The customer's reservations |
+| PATCH | `/reservations/:id/cancel` | Customer | Cancel |
+| GET | `/reservations/:id` | Customer/Pharmacist/Staff | Detail |
+| GET | `/reservations/branch/:branchId` | Pharmacist/Staff | Branch reservations. `group` = active (pending, confirmed or ready, soonest expiry first), served or closed (expired or cancelled); or a single `status`; `from`/`to` |
+| GET | `/reservations/verify/:code` | Pharmacist/Staff | Look up by pickup code (the QR encodes the same code), case-insensitive |
+| PATCH | `/reservations/:id/confirm` → `/ready` → `/serve` | Pharmacist/Staff | Move through pending → confirmed → ready → served; serving deducts stock |
+| PATCH | `/reservations/:id/cancel-pharmacy` | Pharmacist/Staff | Cancel with a reason |
+
+Reservation responses include `customer.customerProfile` (first and last name).
 
 ### Subscriptions (`/subscriptions`)
 | Method | Path | Auth | Description |

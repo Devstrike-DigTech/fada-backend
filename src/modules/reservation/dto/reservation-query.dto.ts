@@ -1,4 +1,4 @@
-import { IsDateString, IsEnum, IsOptional } from 'class-validator';
+import { IsIn, IsDateString, IsEnum, IsOptional } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '@common/dto/pagination.dto';
 
@@ -36,4 +36,13 @@ export class ReservationQueryDto extends PaginationDto {
   @IsOptional()
   @IsDateString()
   to?: string;
+
+  @ApiPropertyOptional({
+    enum: ['active', 'served', 'closed'],
+    description:
+      'Pharmacy tabs: active = pending, confirmed or ready (soonest expiry first); served; closed = expired or cancelled',
+  })
+  @IsOptional()
+  @IsIn(['active', 'served', 'closed'])
+  group?: 'active' | 'served' | 'closed';
 }

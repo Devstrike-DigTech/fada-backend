@@ -75,6 +75,8 @@ const RESERVATION_INCLUDE = {
       firstName: true,
       lastName: true,
       phone: true,
+      // Customers keep their name on the profile, not the user row
+      customerProfile: { select: { firstName: true, lastName: true } },
     },
   },
 } as const;
@@ -735,9 +737,15 @@ export class ReservationService implements OnModuleInit {
     base: Prisma.ReservationWhereInput,
     query: ReservationQueryDto,
   ): Prisma.ReservationWhereInput {
+    const groups: Record<string, ReservationStatus[]> = {
+      active: ['pending', 'confirmed', 'ready'],
+      served: ['served'],
+      closed: ['expired', 'cancelled'],
+    };
     return {
       ...base,
       ...(query.status && { status: query.status as ReservationStatus }),
+      ...(query.group && { status: { in: groups[query.group] } }),
       ...(query.from || query.to
         ? {
             createdAt: {
@@ -758,7 +766,15 @@ export class ReservationService implements OnModuleInit {
       this.prisma.reservation.findMany({
         where,
         include: RESERVATION_INCLUDE,
-        orderBy: { createdAt: 'desc' },
+        // Open ones by what expires first; the rest by latest activity
+        orderBy:
+          query.group === 'active'
+            ? [{ expiresAt: 'asc' }]
+            : query.group === 'served'
+              ? [{ servedAt: 'desc' }]
+              : query.group === 'closed'
+                ? [{ updatedAt: 'desc' }]
+                : [{ createdAt: 'desc' }],
         skip: query.skip,
         take: query.take,
       }),

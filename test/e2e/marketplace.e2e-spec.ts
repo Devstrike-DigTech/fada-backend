@@ -248,6 +248,35 @@ describe('Marketplace: onboarding → verification → search → reservation', 
     expect(created.body.data.alphanumericCode).toMatch(/^RSV/);
 
     const owner = { token: s.ownerToken! };
+    const branchList = (group: string) =>
+      t.http
+        .get(api(`/reservations/branch/${s.branchId}?group=${group}`))
+        .set(bearer(owner))
+        .expect(200);
+
+    // Open reservations show under "active", with the customer's name
+    const active = await branchList('active');
+    const mine = active.body.data.find(
+      (r: { id: string }) => r.id === s.reservationId,
+    );
+    expect(mine.customer.customerProfile).toEqual({
+      firstName: 'Ada',
+      lastName: 'Eze',
+    });
+    const code = await t.http
+      .get(
+        api(
+          `/reservations/verify/${created.body.data.alphanumericCode.toLowerCase()}`,
+        ),
+      )
+      .set(bearer(owner))
+      .expect(200);
+    expect(code.body.data.id).toBe(s.reservationId);
+    await t.http
+      .get(api(`/reservations/branch/${s.branchId}?group=everything`))
+      .set(bearer(owner))
+      .expect(400);
+
     for (const [step, status] of [
       ['confirm', 'confirmed'],
       ['ready', 'ready'],
@@ -265,6 +294,14 @@ describe('Marketplace: onboarding → verification → search → reservation', 
       where: { id: s.drugId },
     });
     expect(drug.stockAmount).toBe(28);
+
+    // Served moves it out of "active" and into "served"
+    const after = await branchList('active');
+    expect(after.body.data.map((r: { id: string }) => r.id)).not.toContain(
+      s.reservationId,
+    );
+    const served = await branchList('served');
+    expect(served.body.data[0].id).toBe(s.reservationId);
   });
 
   it('rewards both sides and notifies the customer at each step', async () => {
