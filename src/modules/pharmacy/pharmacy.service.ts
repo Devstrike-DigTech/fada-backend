@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '@infra/database/prisma.service';
 import { EventBusService } from '@infra/events/event-bus.service';
@@ -512,6 +513,18 @@ export class PharmacyService {
       select: { name: true },
     });
 
+    // A customer or pharmacy-owner account can't double as team staff:
+    // the pharmacy app routes by role, so the invite could never be used.
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.email.toLowerCase() },
+      select: { role: true },
+    });
+    if (existingUser && existingUser.role !== 'staff') {
+      throw new BadRequestException(
+        'That email already belongs to a FADA customer or pharmacy owner account, which can’t join a team. Invite a different email.',
+      );
+    }
+
     // Cancel any existing pending invite for this email+pharmacy
     await this.prisma.pharmacyStaffInvite.deleteMany({
       where: { pharmacyId, email: dto.email.toLowerCase(), acceptedAt: null },
@@ -581,7 +594,22 @@ export class PharmacyService {
     });
 
     if (staffUser) {
-      // Account exists — check they're not already a member
+      // Account exists — the link alone mustn't sign someone into it, so
+      // they confirm with the password they already use.
+      if (staffUser.role !== 'staff' || !staffUser.isActive) {
+        throw new BadRequestException(
+          'This email belongs to an account that can’t join a pharmacy team. Ask the owner to invite a different email.',
+        );
+      }
+      const matches =
+        !!staffUser.passwordHash &&
+        (await bcrypt.compare(dto.password, staffUser.passwordHash));
+      if (!matches) {
+        throw new UnauthorizedException(
+          'That password doesn’t match your FADA account. Use the password you sign in with.',
+        );
+      }
+      // …and that they're not already a member
       const existing = await this.prisma.pharmacyStaff.findUnique({
         where: {
           userId_pharmacyId: {

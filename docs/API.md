@@ -81,7 +81,7 @@ X-Device-ID: {device_fingerprint}
 | GET | `/pharmacy/staff/me` | Staff/Pharmacist | Pharmacies and branches the signed-in staff member works at |
 | GET | `/pharmacy/staff/invites/:token` | Public | Invite preview: pharmacy, branch, role, invitee, status |
 | GET | `/pharmacy/staff/join/:token` | Public | HTML landing page from the invite email; opens `fadapharmacy://open/join/:token` |
-| POST | `/pharmacy/staff/accept-invite/:token` | Public | Accept (sets a password for new accounts); returns user + tokens |
+| POST | `/pharmacy/staff/accept-invite/:token` | Public | Accept: new accounts set a password, existing staff accounts confirm theirs (401 if wrong); returns user + tokens. Invites to customer or owner emails are refused with 400 |
 | PUT | `/pharmacies/:id/profile` | Pharmacist | Update profile |
 | POST | `/pharmacies/:id/images` | Pharmacist | Upload pharmacy photos |
 | GET | `/pharmacies/:id/branches` | Public | List branches |

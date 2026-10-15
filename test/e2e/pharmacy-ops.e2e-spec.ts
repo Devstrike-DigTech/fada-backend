@@ -215,6 +215,53 @@ describe('Pharmacy operations and inventory', () => {
       .expect(400);
   });
 
+  it('makes an existing team member confirm their password to join another pharmacy', async () => {
+    const email = `floater.${Date.now()}@test.ng`;
+    const invite = async (p: PharmacyFixture) => {
+      await t.http
+        .post(api(`/pharmacy/${p.pharmacyId}/staff/invite`))
+        .set(bearer(p.owner))
+        .send({ firstName: 'Ada', lastName: 'Obi', email, role: 'staff' })
+        .expect(200);
+      return (
+        await t.prisma.pharmacyStaffInvite.findFirstOrThrow({
+          where: { email, pharmacyId: p.pharmacyId },
+        })
+      ).token;
+    };
+    await t.http
+      .post(api(`/pharmacy/staff/accept-invite/${await invite(ph)}`))
+      .send({ password: 'Staff!Pass1' })
+      .expect(200);
+
+    const other = await createPharmacy(t, { name: 'Ogui Road Pharmacy' });
+    const second = await invite(other);
+    const preview = await t.http
+      .get(api(`/pharmacy/staff/invites/${second}`))
+      .expect(200);
+    expect(preview.body.data.hasAccount).toBe(true);
+
+    // The link alone doesn't sign anyone into an existing account
+    await t.http
+      .post(api(`/pharmacy/staff/accept-invite/${second}`))
+      .send({ password: 'Wrong!Pass9' })
+      .expect(401);
+    await t.http
+      .post(api(`/pharmacy/staff/accept-invite/${second}`))
+      .send({ password: 'Staff!Pass1' })
+      .expect(200);
+
+    // Owners and customers can't be invited onto a team
+    const customer = await createCustomer(t);
+    for (const taken of [customer.email, other.owner.email]) {
+      await t.http
+        .post(api(`/pharmacy/${ph.pharmacyId}/staff/invite`))
+        .set(bearer(ph.owner))
+        .send({ firstName: 'No', lastName: 'One', email: taken, role: 'staff' })
+        .expect(400);
+    }
+  });
+
   it('manages drugs: add with NAFDAC enrichment, update, stock, alternatives, delete', async () => {
     const cats = await t.http.get(api('/inventory/categories')).expect(200);
     const primary = cats.body.data.primary.find(
