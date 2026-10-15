@@ -253,3 +253,20 @@ npm run start:prod         # Start production build
 5. `npx prisma migrate dev` (apply any new migrations)
 6. `npm run start:dev`
 7. Check `docs/PHASES.md` for current phase status
+
+## Payments in development
+
+Checkout returns to the pharmacy app through `PAYMENT_SUCCESS_REDIRECT_URL=fadapharmacy://payment-complete`
+(set it in every environment the app pays against).
+
+With a Paystack test key (`sk_test_…`) the real test checkout works and Paystack's test cards can be used.
+Without one, run the local stand-in and point the backend at it:
+
+```bash
+python3 scripts/mock-paystack.py                       # http://127.0.0.1:3996
+PAYSTACK_BASE_URL=http://127.0.0.1:3996 npm run start:dev
+```
+
+Its checkout page has Pay and Decline buttons and returns through the normal callback, so the whole
+subscribe → pay → verify → activate path runs locally. `GET /__autopay?seconds=N` makes checkout pages
+pay by themselves, for automated tests and demo recordings. Never point production at it.
