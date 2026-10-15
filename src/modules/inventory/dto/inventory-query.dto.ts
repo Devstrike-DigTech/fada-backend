@@ -1,15 +1,24 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   MaxLength,
   MinLength,
 } from 'class-validator';
 import { PaginationDto } from '@common/dto/pagination.dto';
-import { PrescriptionTypeDto } from './add-drug.dto';
+import { DrugTypeDto, PrescriptionTypeDto } from './add-drug.dto';
+
+export const INVENTORY_SORT_FIELDS = [
+  'name',
+  'updatedAt',
+  'stockAmount',
+  'price',
+] as const;
+export type InventorySortField = (typeof INVENTORY_SORT_FIELDS)[number];
 
 export enum StockStatusFilter {
   IN_STOCK = 'in_stock',
@@ -49,9 +58,38 @@ export class InventoryQueryDto extends PaginationDto {
   @IsEnum(PrescriptionTypeDto)
   prescriptionType?: PrescriptionTypeDto;
 
+  @ApiPropertyOptional({
+    enum: DrugTypeDto,
+    description: 'Filter by drug type (oral, infusion, injectable, …)',
+  })
+  @IsOptional()
+  @IsEnum(DrugTypeDto)
+  drugType?: DrugTypeDto;
+
   @ApiPropertyOptional({ example: false, description: 'Include expired drugs' })
   @IsOptional()
-  @Type(() => Boolean)
+  // "false" in a query string must stay false (Boolean('false') is true)
+  @Transform(({ value }: { value: unknown }) =>
+    value === 'true' || value === true
+      ? true
+      : value === 'false' || value === false
+        ? false
+        : value,
+  )
   @IsBoolean()
   includeExpired?: boolean;
+
+  @ApiPropertyOptional({
+    enum: INVENTORY_SORT_FIELDS,
+    default: 'name',
+    description: 'Sort field; combine with sortOrder (asc | desc)',
+  })
+  @IsOptional()
+  @IsIn(INVENTORY_SORT_FIELDS)
+  declare sortBy?: InventorySortField;
+
+  @ApiPropertyOptional({ enum: ['asc', 'desc'] })
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  declare sortOrder?: 'asc' | 'desc';
 }

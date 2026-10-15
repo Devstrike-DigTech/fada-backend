@@ -89,19 +89,19 @@ X-Device-ID: {device_fingerprint}
 ### Inventory (`/inventory`)
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/inventory/categories` | Public | List drug categories |
-| GET | `/inventory/nafdac/:number` | Pharmacist | NAFDAC number lookup |
-| GET | `/inventory/batch-upload/template` | Pharmacist | Download CSV template |
-| GET | `/inventory/:branchId/summary` | Pharmacist | Slots used + last drug |
-| GET | `/inventory/:branchId/drugs` | Pharmacist | Paginated drug list |
-| POST | `/inventory/:branchId/drugs` | Pharmacist | Add single drug |
-| GET | `/inventory/:branchId/drugs/:drugId` | Pharmacist | Drug detail |
-| PUT | `/inventory/:branchId/drugs/:drugId` | Pharmacist | Update drug |
-| DELETE | `/inventory/:branchId/drugs/:drugId` | Pharmacist | Delete drug |
-| POST | `/inventory/:branchId/drugs/:drugId/images` | Pharmacist | Upload drug images |
-| POST | `/inventory/:branchId/drugs/batch-upload` | Pharmacist | Batch upload |
-| GET | `/inventory/:branchId/drugs/batch-upload/:jobId` | Pharmacist | Upload job status |
-| POST | `/inventory/:branchId/drugs/:drugId/alternatives` | Pharmacist | Link alternative |
+| GET | `/inventory/categories` | Public | Primary (therapeutic) and secondary (form) categories |
+| GET | `/inventory/nafdac?nafdacNumber=` or `?name=` | Pharmacist | NAFDAC lookup by number, or name suggestions |
+| GET | `/inventory/branch/:branchId` | Pharmacist/Staff | Paginated drugs. Filters: `search`, `drugType`, `stockStatus`, `prescriptionType`, `categoryId`, `includeExpired`. Sort: `sortBy` = name, updatedAt, stockAmount or price, with `sortOrder` |
+| GET | `/inventory/branch/:branchId/summary` | Pharmacist/Staff | Counts by stock status, `byType` counts for all five drug types, expiring soon, and `lastUpdated` drug |
+| GET | `/inventory/branch/:branchId/public` | Public | Customer-facing list |
+| POST | `/inventory/branch/:branchId/drugs` | Pharmacist/Staff | Add a drug (NAFDAC enrichment when a number is given) |
+| GET | `/inventory/drugs/:drugId` | Pharmacist/Staff | Drug detail with indications, contraindications, images, alternatives |
+| PATCH | `/inventory/drugs/:drugId` | Pharmacist/Staff | Update a drug |
+| PATCH | `/inventory/drugs/:drugId/stock` | Pharmacist/Staff | Set, add or subtract stock, with a reason |
+| DELETE | `/inventory/drugs/:drugId` | Pharmacist/Staff | Delete a drug |
+| POST/DELETE | `/inventory/drugs/:drugId/images[/:imageId]` | Pharmacist/Staff | Drug images |
+| POST/DELETE | `/inventory/drugs/:drugId/alternatives[/:alternativeDrugId]` | Pharmacist/Staff | Link an alternative from the same inventory |
+| POST | `/inventory/branch/:branchId/batch-upload` | Pharmacist | CSV batch upload |
 
 ### Search (`/search`)
 | Method | Path | Auth | Description |

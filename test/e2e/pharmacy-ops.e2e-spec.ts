@@ -185,8 +185,64 @@ describe('Pharmacy operations and inventory', () => {
       .set(bearer(ph.owner))
       .expect(200);
     expect(list.body.meta.total).toBeGreaterThanOrEqual(2);
-    await t.http
+    const summary = await t.http
       .get(api(`/inventory/branch/${ph.branchId}/summary`))
+      .set(bearer(ph.owner))
+      .expect(200);
+    expect(summary.body.data.byType).toMatchObject({ oral: 2, injectable: 0 });
+    expect(Object.keys(summary.body.data.byType)).toHaveLength(5);
+    expect(summary.body.data.lastUpdated).toMatchObject({
+      id: a.body.data.id,
+      drugType: 'oral',
+    });
+
+    // Filter by drug type, search (with expired drugs hidden) and sort
+    const injectable = await t.http
+      .post(api(`/inventory/branch/${ph.branchId}/drugs`))
+      .set(bearer(ph.owner))
+      .send({
+        name: `Ceftriaxone ${Date.now()}`,
+        drugType: 'injectable',
+        price: 1800,
+        stockAmount: 30,
+      })
+      .expect(201);
+    const oral = await t.http
+      .get(api(`/inventory/branch/${ph.branchId}?drugType=oral`))
+      .set(bearer(ph.owner))
+      .expect(200);
+    expect(
+      oral.body.data.every((d: { drugType: string }) => d.drugType === 'oral'),
+    ).toBe(true);
+    const found = await t.http
+      .get(
+        api(
+          `/inventory/branch/${ph.branchId}?search=Ceftriaxone&includeExpired=false`,
+        ),
+      )
+      .set(bearer(ph.owner))
+      .expect(200);
+    expect(found.body.data.map((d: { id: string }) => d.id)).toEqual([
+      injectable.body.data.id,
+    ]);
+    const byStock = await t.http
+      .get(
+        api(
+          `/inventory/branch/${ph.branchId}?sortBy=stockAmount&sortOrder=desc`,
+        ),
+      )
+      .set(bearer(ph.owner))
+      .expect(200);
+    const stocks = byStock.body.data.map(
+      (d: { stockAmount: number }) => d.stockAmount,
+    );
+    expect(stocks).toEqual([...stocks].sort((x: number, y: number) => y - x));
+    await t.http
+      .get(api(`/inventory/branch/${ph.branchId}?sortBy=passwordHash`))
+      .set(bearer(ph.owner))
+      .expect(400);
+    await t.http
+      .delete(api(`/inventory/drugs/${injectable.body.data.id}`))
       .set(bearer(ph.owner))
       .expect(200);
     await t.http

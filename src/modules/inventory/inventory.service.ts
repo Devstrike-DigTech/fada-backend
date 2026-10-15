@@ -547,26 +547,41 @@ export class InventoryService {
   private async queryInventory(branchId: string, query: InventoryQueryDto) {
     const now = new Date();
 
-    const where: Prisma.DrugWhereInput = {
-      branchId,
-      ...(query.search && {
+    // Search and the expiry rule are both OR groups, so they go in AND:
+    // spreading two `OR` keys into one object silently dropped the search.
+    const and: Prisma.DrugWhereInput[] = [];
+    if (query.search) {
+      and.push({
         OR: [
           { name: { contains: query.search, mode: 'insensitive' } },
           { genericName: { contains: query.search, mode: 'insensitive' } },
           { aliasName: { contains: query.search, mode: 'insensitive' } },
         ],
-      }),
+      });
+    }
+    if (!query.includeExpired) {
+      and.push({ OR: [{ expiryDate: null }, { expiryDate: { gt: now } }] });
+    }
+    const where: Prisma.DrugWhereInput = {
+      branchId,
+      ...(and.length && { AND: and }),
       ...(query.stockStatus && { stockStatus: query.stockStatus }),
+      ...(query.drugType && { drugType: query.drugType }),
       ...(query.prescriptionType && {
         prescriptionType: query.prescriptionType,
-      }),
-      ...(!query.includeExpired && {
-        OR: [{ expiryDate: null }, { expiryDate: { gt: now } }],
       }),
       ...(query.categoryId && {
         categories: { some: { categoryId: query.categoryId } },
       }),
     };
+    // PaginationDto defaults sortOrder to 'desc', so only honour it when a
+    // sort field was asked for; otherwise keep the long-standing A–Z order.
+    const sortBy = query.sortBy ?? 'name';
+    const sortOrder = query.sortBy ? (query.sortOrder ?? 'desc') : 'asc';
+    const orderBy: Prisma.DrugOrderByWithRelationInput[] = [
+      { [sortBy]: sortOrder },
+      ...(sortBy === 'name' ? [] : [{ name: 'asc' as const }]),
+    ];
 
     const [total, drugs] = await Promise.all([
       this.prisma.drug.count({ where }),
@@ -578,7 +593,7 @@ export class InventoryService {
           },
           images: { where: { sortOrder: 0 }, take: 1 },
         },
-        orderBy: { name: 'asc' },
+        orderBy,
         skip: query.skip,
         take: query.take,
       }),
@@ -605,7 +620,7 @@ export class InventoryService {
   async getInventorySummary(pharmacistUserId: string, branchId: string) {
     await this.assertBranchAccess(pharmacistUserId, branchId);
 
-    const [total, inStock, lowStock, outOfStock, expiringSoon] =
+    const [total, inStock, lowStock, outOfStock, expiringSoon, types, last] =
       await Promise.all([
         this.prisma.drug.count({ where: { branchId } }),
         this.prisma.drug.count({
@@ -626,9 +641,57 @@ export class InventoryService {
             },
           },
         }),
+        this.prisma.drug.groupBy({
+          by: ['drugType'],
+          where: { branchId },
+          _count: { _all: true },
+        }),
+        this.prisma.drug.findFirst({
+          where: { branchId },
+          orderBy: { updatedAt: 'desc' },
+          select: {
+            id: true,
+            name: true,
+            drugType: true,
+            price: true,
+            stockAmount: true,
+            packageType: true,
+            updatedAt: true,
+            images: { where: { sortOrder: 0 }, take: 1, select: { url: true } },
+          },
+        }),
       ]);
 
-    return { total, inStock, lowStock, outOfStock, expiringSoon };
+    // Every type appears, so the app can show empty categories too
+    const byType: Record<string, number> = {
+      oral: 0,
+      infusion: 0,
+      injectable: 0,
+      antiseptic: 0,
+      other: 0,
+    };
+    for (const t of types) byType[t.drugType] = t._count._all;
+
+    return {
+      total,
+      inStock,
+      lowStock,
+      outOfStock,
+      expiringSoon,
+      byType,
+      lastUpdated: last
+        ? {
+            id: last.id,
+            name: last.name,
+            drugType: last.drugType,
+            price: last.price,
+            stockAmount: last.stockAmount,
+            packageType: last.packageType,
+            updatedAt: last.updatedAt,
+            imageUrl: last.images[0]?.url ?? null,
+          }
+        : null,
+    };
   }
 
   // ─── Drug Image Upload ──────────────────────────────────────────────────────
