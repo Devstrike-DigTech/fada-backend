@@ -96,6 +96,18 @@ describe('Marketplace: onboarding → verification → search → reservation', 
       where: { id: s.pharmacyId },
     });
     expect(p.isVerified).toBe(false); // PCN not verified yet
+
+    // The owner sees what is still outstanding
+    const mine = await t.http
+      .get(api('/pharmacy/me/verification'))
+      .set('Authorization', `Bearer ${s.ownerToken}`)
+      .expect(200);
+    expect(mine.body.data).toMatchObject({
+      isVerified: false,
+      missing: ['owner_pcn_licence'],
+      pcn: { verified: false, licenseType: 'PHARMACIST' },
+      cac: { verified: true },
+    });
   });
 
   it('becomes verified when an admin confirms the PCN licence, and the owner is told', async () => {
@@ -154,6 +166,15 @@ describe('Marketplace: onboarding → verification → search → reservation', 
       .set(bearer(admin))
       .expect(200);
     expect(status.body.data).toMatchObject({ isVerified: true, missing: [] });
+    const mine = await t.http
+      .get(api('/pharmacy/me/verification'))
+      .set('Authorization', `Bearer ${s.ownerToken}`)
+      .expect(200);
+    expect(mine.body.data).toMatchObject({
+      isVerified: true,
+      missing: [],
+      pcn: { verified: true },
+    });
   });
 
   it('lets the pharmacist stock a drug (and earn +5 points)', async () => {

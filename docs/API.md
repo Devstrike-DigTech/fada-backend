@@ -59,7 +59,8 @@ X-Device-ID: {device_fingerprint}
 |---|---|---|---|
 | POST | `/auth/register/customer` | Public | Register customer (multi-step) |
 | POST | `/auth/register/pharmacist` | Public | Register pharmacist (multi-step) |
-| POST | `/auth/verify/email` | Public | Verify email OTP |
+| POST | `/auth/verify-email` | Public | Verify email OTP (returns user + tokens) |
+| POST | `/auth/resend-otp` | Public | Resend the email verification code |
 | POST | `/auth/login` | Public | Login with email/FADA ID + password |
 | GET | `/auth/login/google` | Public | Google OAuth redirect |
 | POST | `/auth/login/apple` | Public | Apple Sign-In |
@@ -70,10 +71,13 @@ X-Device-ID: {device_fingerprint}
 | POST | `/auth/password/verify-otp` | Public | Verify reset OTP |
 | POST | `/auth/password/reset` | Public | Set new password |
 
-### Pharmacy (`/pharmacies`)
+### Pharmacy (`/pharmacy`)
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/pharmacies/:id` | Public | Public pharmacy profile |
+| POST | `/pharmacy` | Pharmacist | Register the pharmacist's pharmacy (creates the head branch) |
+| GET | `/pharmacy/me` | Pharmacist | The logged-in pharmacist's pharmacy |
+| GET | `/pharmacy/me/verification` | Pharmacist | Verification status: PCN licence and CAC registration, with what is missing |
+| GET | `/pharmacy/:id` | Public | Public pharmacy profile |
 | PUT | `/pharmacies/:id/profile` | Pharmacist | Update profile |
 | POST | `/pharmacies/:id/images` | Pharmacist | Upload pharmacy photos |
 | GET | `/pharmacies/:id/branches` | Public | List branches |

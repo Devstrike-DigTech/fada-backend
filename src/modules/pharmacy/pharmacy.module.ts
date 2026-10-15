@@ -3,6 +3,7 @@ import { MulterModule } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { AuthModule } from '@modules/auth/auth.module';
 import { SubscriptionModule } from '@modules/subscription/subscription.module';
+import { VerificationModule } from '@modules/verification/verification.module';
 import { PharmacyController } from './pharmacy.controller';
 import { PharmacyService } from './pharmacy.service';
 
@@ -12,6 +13,7 @@ import { PharmacyService } from './pharmacy.service';
     MulterModule.register({ storage: memoryStorage() }),
     AuthModule,
     SubscriptionModule, // plan limits (branch count)
+    VerificationModule, // owner-facing verification status
   ],
   controllers: [PharmacyController],
   providers: [PharmacyService],

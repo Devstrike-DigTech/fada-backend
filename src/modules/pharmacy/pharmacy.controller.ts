@@ -29,6 +29,7 @@ import { Roles } from '@common/decorators/roles.decorator';
 import { Public } from '@common/decorators/public.decorator';
 import { UserRole } from '@common/decorators/roles.decorator';
 import { PharmacyService } from './pharmacy.service';
+import { PharmacyVerificationService } from '@modules/verification/pharmacy-verification.service';
 import { CreatePharmacyDto } from './dto/create-pharmacy.dto';
 import { UpdatePharmacyDto } from './dto/update-pharmacy.dto';
 import { CreateBranchDto } from './dto/create-branch.dto';
@@ -40,7 +41,10 @@ import { SetWorkingHoursDto } from './dto/set-working-hours.dto';
 @ApiTags('Pharmacy')
 @Controller({ path: 'pharmacy', version: '1' })
 export class PharmacyController {
-  constructor(private readonly pharmacyService: PharmacyService) {}
+  constructor(
+    private readonly pharmacyService: PharmacyService,
+    private readonly verification: PharmacyVerificationService,
+  ) {}
 
   // ─── Create Pharmacy ────────────────────────────────────────────────────────
 
@@ -66,6 +70,18 @@ export class PharmacyController {
   })
   getMyPharmacy(@CurrentUser() user: CurrentUserData) {
     return this.pharmacyService.getMyPharmacy(user.sub);
+  }
+
+  @Get('me/verification')
+  @Roles(UserRole.PHARMACIST)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary:
+      "What the logged-in pharmacist's pharmacy still needs to be verified (PCN licence, CAC registration)",
+  })
+  async getMyVerification(@CurrentUser() user: CurrentUserData) {
+    const pharmacy = await this.pharmacyService.getMyPharmacy(user.sub);
+    return this.verification.status(pharmacy.id);
   }
 
   // ─── Update Pharmacy ────────────────────────────────────────────────────────

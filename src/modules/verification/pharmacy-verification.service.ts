@@ -74,6 +74,49 @@ export class PharmacyVerificationService {
     return { isVerified, changed: true, missing };
   }
 
+  /**
+   * What a pharmacy owner sees while waiting: each requirement and whether it
+   * is met. Read-only; `recompute` is what flips `isVerified`.
+   */
+  async status(pharmacyId: string) {
+    const pharmacy = await this.prisma.pharmacy.findUnique({
+      where: { id: pharmacyId },
+      select: {
+        isVerified: true,
+        cacNumber: true,
+        cacVerified: true,
+        ownerId: true,
+        pharmacistProfiles: {
+          where: { roleInPharmacy: 'owner' },
+          select: {
+            userId: true,
+            pcnVerified: true,
+            licenseNumber: true,
+            licenseType: true,
+          },
+        },
+      },
+    });
+    if (!pharmacy) throw new NotFoundException('Pharmacy not found');
+    const owner =
+      pharmacy.pharmacistProfiles.find((p) => p.userId === pharmacy.ownerId) ??
+      pharmacy.pharmacistProfiles[0];
+    const pcnVerified = owner?.pcnVerified ?? false;
+    const missing: string[] = [];
+    if (!pcnVerified) missing.push('owner_pcn_licence');
+    if (!pharmacy.cacVerified) missing.push('cac_registration');
+    return {
+      isVerified: pharmacy.isVerified && missing.length === 0,
+      missing,
+      pcn: {
+        verified: pcnVerified,
+        licenseNumber: owner?.licenseNumber ?? null,
+        licenseType: owner?.licenseType ?? null,
+      },
+      cac: { verified: pharmacy.cacVerified, number: pharmacy.cacNumber },
+    };
+  }
+
   /** Back office: mark the business registration verified by hand, then recompute. */
   async adminVerify(pharmacyId: string, adminUserId: string, note?: string) {
     const exists = await this.prisma.pharmacy.findUnique({
