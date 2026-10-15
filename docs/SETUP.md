@@ -179,9 +179,12 @@ NAFDAC_REGISTRY_URL=https://nafdac.gov.ng/api
 
 ## Docker Compose (Development)
 
+`docker compose up -d` starts PostGIS and Redis. Host ports come from `.env` so they can be moved when another
+project already uses the defaults (`POSTGRES_PORT`, default 5433; `REDIS_PORT`, default 6379). Keep `DATABASE_URL`
+and `REDIS_URL` in `.env` pointing at whatever ports you choose.
+
 ```yaml
-# docker-compose.yml
-version: '3.8'
+# docker-compose.yml (abridged)
 services:
   postgres:
     image: postgis/postgis:15-3.3
@@ -191,7 +194,7 @@ services:
       POSTGRES_USER: fada_user
       POSTGRES_PASSWORD: fada_pass
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - fada_postgres_data:/var/lib/postgresql/data
 
@@ -199,7 +202,7 @@ services:
     image: redis:7-alpine
     container_name: fada_redis
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - fada_redis_data:/data
 

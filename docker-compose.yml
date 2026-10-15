@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   postgres:
@@ -10,7 +9,7 @@ services:
       POSTGRES_USER: fada_user
       POSTGRES_PASSWORD: fada_pass
     ports:
-      - '5433:5432'
+      - '${POSTGRES_PORT:-5433}:5432'
     volumes:
       - fada_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,7 +23,7 @@ services:
     container_name: fada_redis
     restart: unless-stopped
     ports:
-      - '6379:6379'
+      - '${REDIS_PORT:-6379}:6379'
     volumes:
       - fada_redis_data:/data
     healthcheck:
